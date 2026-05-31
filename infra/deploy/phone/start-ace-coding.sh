@@ -44,7 +44,7 @@ fi
 
 pkill -f "$APP_DIR/apps/frontend/node_modules/vite/bin/vite.js" 2>/dev/null || true
 cd "$APP_DIR/apps/frontend"
-nohup npm run preview -- --host 0.0.0.0 --port 8080 >"$LOG_DIR/frontend.log" 2>&1 &
+nohup env VITE_API_PROXY_TARGET=http://127.0.0.1:3100 npm run preview -- --host 0.0.0.0 --port 8080 >"$LOG_DIR/frontend.log" 2>&1 &
 
 wait_http "http://127.0.0.1:3100/api/health"
 wait_http "http://127.0.0.1:8080/"
