@@ -8,7 +8,7 @@ MVP coding practice platform for problems, submissions, and pluggable judge runn
 apps/frontend        React/Vite UI
 apps/backend         Express API and judge orchestration
 packages/shared      Shared domain types and constants
-infra/deploy         Phone Ubuntu deployment assets
+infra/deploy         ARM Ubuntu deployment assets
 infra/runners        Azure Container Apps runner notes
 ```
 
