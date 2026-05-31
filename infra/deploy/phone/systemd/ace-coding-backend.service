@@ -7,6 +7,7 @@ Type=simple
 User=Ubuntu
 WorkingDirectory=/opt/ace-coding/current/apps/backend
 Environment=NODE_ENV=production
+Environment=PORT=3100
 EnvironmentFile=-/etc/ace-coding/backend.env
 ExecStart=/usr/bin/npm start
 Restart=always

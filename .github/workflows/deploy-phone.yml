@@ -100,6 +100,6 @@ jobs:
           chmod +x infra/deploy/phone/*.sh
           infra/deploy/phone/start-ace-coding.sh
           infra/deploy/phone/start-aws-9999-tunnel.sh
-          curl -fsS http://127.0.0.1:3000/api/health >/dev/null
+          curl -fsS http://127.0.0.1:3100/api/health >/dev/null
           curl -fsS http://127.0.0.1:8080/ >/dev/null
           REMOTE
