@@ -1,0 +1,16 @@
+[Unit]
+Description=Ace Coding Practice Backend
+After=network.target
+
+[Service]
+Type=simple
+User=Ubuntu
+WorkingDirectory=/opt/ace-coding/current/apps/backend
+Environment=NODE_ENV=production
+EnvironmentFile=-/etc/ace-coding/backend.env
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

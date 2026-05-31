@@ -1,0 +1,97 @@
+name: Deploy to phone
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ace-phone-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Configure SSH
+        env:
+          PHONE_SSH_KEY: ${{ secrets.PHONE_SSH_KEY }}
+          PHONE_SSH_HOST: ${{ secrets.PHONE_SSH_HOST }}
+          PHONE_SSH_PORT: ${{ secrets.PHONE_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          test -n "$PHONE_SSH_KEY"
+          test -n "$PHONE_SSH_HOST"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$PHONE_SSH_KEY" > ~/.ssh/phone_deploy_key
+          chmod 600 ~/.ssh/phone_deploy_key
+          ssh-keyscan -T 10 -p "${PHONE_SSH_PORT:-10022}" "$PHONE_SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Package release
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='**/node_modules' \
+            --exclude='*.log' \
+            -czf /tmp/ace-coding-release.tgz .
+
+      - name: Upload release
+        env:
+          PHONE_SSH_HOST: ${{ secrets.PHONE_SSH_HOST }}
+          PHONE_SSH_PORT: ${{ secrets.PHONE_SSH_PORT }}
+          PHONE_SSH_USER: ${{ secrets.PHONE_SSH_USER }}
+        run: |
+          scp -i ~/.ssh/phone_deploy_key -P "${PHONE_SSH_PORT:-10022}" \
+            /tmp/ace-coding-release.tgz \
+            "${PHONE_SSH_USER:-Ubuntu}@${PHONE_SSH_HOST}:/tmp/ace-coding-release.tgz"
+
+      - name: Deploy and restart
+        env:
+          PHONE_SSH_HOST: ${{ secrets.PHONE_SSH_HOST }}
+          PHONE_SSH_PORT: ${{ secrets.PHONE_SSH_PORT }}
+          PHONE_SSH_USER: ${{ secrets.PHONE_SSH_USER }}
+          PHONE_DEPLOY_PATH: ${{ secrets.PHONE_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/phone_deploy_key -p "${PHONE_SSH_PORT:-10022}" \
+            "${PHONE_SSH_USER:-Ubuntu}@${PHONE_SSH_HOST}" \
+            "PHONE_DEPLOY_PATH='${PHONE_DEPLOY_PATH:-/opt/ace-coding/current}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          app_dir="${PHONE_DEPLOY_PATH:-/opt/ace-coding/current}"
+          mkdir -p "$app_dir"
+
+          if [ -f "$app_dir/apps/backend/.env" ]; then
+            cp "$app_dir/apps/backend/.env" /tmp/ace-backend.env
+          fi
+          tar -xzf /tmp/ace-coding-release.tgz -C "$app_dir"
+          if [ -f /tmp/ace-backend.env ]; then
+            mv /tmp/ace-backend.env "$app_dir/apps/backend/.env"
+          fi
+
+          cd "$app_dir"
+          export npm_config_cache=/tmp/ace-coding-npm-cache
+          npm ci --omit=dev
+          chmod +x infra/deploy/phone/*.sh
+          infra/deploy/phone/start-ace-coding.sh
+          infra/deploy/phone/start-aws-9999-tunnel.sh
+          curl -fsS http://127.0.0.1:3000/api/health >/dev/null
+          curl -fsS http://127.0.0.1:8080/ >/dev/null
+          REMOTE
