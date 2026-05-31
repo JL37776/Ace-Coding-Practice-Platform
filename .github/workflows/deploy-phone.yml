@@ -30,19 +30,20 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Install SSH password client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
       - name: Configure SSH
         env:
-          PHONE_SSH_KEY: ${{ secrets.PHONE_SSH_KEY }}
           PHONE_SSH_HOST: ${{ vars.PHONE_SSH_HOST }}
           PHONE_SSH_PORT: ${{ vars.PHONE_SSH_PORT }}
         run: |
           set -euo pipefail
-          test -n "$PHONE_SSH_KEY"
           test -n "$PHONE_SSH_HOST"
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "$PHONE_SSH_KEY" > ~/.ssh/phone_deploy_key
-          chmod 600 ~/.ssh/phone_deploy_key
           ssh-keyscan -T 10 -p "${PHONE_SSH_PORT:-10022}" "$PHONE_SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: Package release
@@ -59,8 +60,11 @@ jobs:
           PHONE_SSH_HOST: ${{ vars.PHONE_SSH_HOST }}
           PHONE_SSH_PORT: ${{ vars.PHONE_SSH_PORT }}
           PHONE_SSH_USER: ${{ vars.PHONE_SSH_USER }}
+          PHONE_SSH_PASSWORD: ${{ secrets.PHONE_SSH_PASSWORD }}
         run: |
-          scp -i ~/.ssh/phone_deploy_key -P "${PHONE_SSH_PORT:-10022}" \
+          test -n "$PHONE_SSH_PASSWORD"
+          sshpass -p "$PHONE_SSH_PASSWORD" scp -P "${PHONE_SSH_PORT:-10022}" \
+            -o StrictHostKeyChecking=yes \
             /tmp/ace-coding-release.tgz \
             "${PHONE_SSH_USER:-Ubuntu}@${PHONE_SSH_HOST}:/tmp/ace-coding-release.tgz"
 
@@ -69,9 +73,12 @@ jobs:
           PHONE_SSH_HOST: ${{ vars.PHONE_SSH_HOST }}
           PHONE_SSH_PORT: ${{ vars.PHONE_SSH_PORT }}
           PHONE_SSH_USER: ${{ vars.PHONE_SSH_USER }}
+          PHONE_SSH_PASSWORD: ${{ secrets.PHONE_SSH_PASSWORD }}
           PHONE_DEPLOY_PATH: ${{ vars.PHONE_DEPLOY_PATH }}
         run: |
-          ssh -i ~/.ssh/phone_deploy_key -p "${PHONE_SSH_PORT:-10022}" \
+          test -n "$PHONE_SSH_PASSWORD"
+          sshpass -p "$PHONE_SSH_PASSWORD" ssh -p "${PHONE_SSH_PORT:-10022}" \
+            -o StrictHostKeyChecking=yes \
             "${PHONE_SSH_USER:-Ubuntu}@${PHONE_SSH_HOST}" \
             "PHONE_DEPLOY_PATH='${PHONE_DEPLOY_PATH:-/opt/ace-coding/current}' bash -s" <<'REMOTE'
           set -euo pipefail
