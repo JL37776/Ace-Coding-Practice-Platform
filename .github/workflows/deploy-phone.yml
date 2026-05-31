@@ -33,8 +33,8 @@ jobs:
       - name: Configure SSH
         env:
           PHONE_SSH_KEY: ${{ secrets.PHONE_SSH_KEY }}
-          PHONE_SSH_HOST: ${{ secrets.PHONE_SSH_HOST }}
-          PHONE_SSH_PORT: ${{ secrets.PHONE_SSH_PORT }}
+          PHONE_SSH_HOST: ${{ vars.PHONE_SSH_HOST }}
+          PHONE_SSH_PORT: ${{ vars.PHONE_SSH_PORT }}
         run: |
           set -euo pipefail
           test -n "$PHONE_SSH_KEY"
@@ -56,9 +56,9 @@ jobs:
 
       - name: Upload release
         env:
-          PHONE_SSH_HOST: ${{ secrets.PHONE_SSH_HOST }}
-          PHONE_SSH_PORT: ${{ secrets.PHONE_SSH_PORT }}
-          PHONE_SSH_USER: ${{ secrets.PHONE_SSH_USER }}
+          PHONE_SSH_HOST: ${{ vars.PHONE_SSH_HOST }}
+          PHONE_SSH_PORT: ${{ vars.PHONE_SSH_PORT }}
+          PHONE_SSH_USER: ${{ vars.PHONE_SSH_USER }}
         run: |
           scp -i ~/.ssh/phone_deploy_key -P "${PHONE_SSH_PORT:-10022}" \
             /tmp/ace-coding-release.tgz \
@@ -66,10 +66,10 @@ jobs:
 
       - name: Deploy and restart
         env:
-          PHONE_SSH_HOST: ${{ secrets.PHONE_SSH_HOST }}
-          PHONE_SSH_PORT: ${{ secrets.PHONE_SSH_PORT }}
-          PHONE_SSH_USER: ${{ secrets.PHONE_SSH_USER }}
-          PHONE_DEPLOY_PATH: ${{ secrets.PHONE_DEPLOY_PATH }}
+          PHONE_SSH_HOST: ${{ vars.PHONE_SSH_HOST }}
+          PHONE_SSH_PORT: ${{ vars.PHONE_SSH_PORT }}
+          PHONE_SSH_USER: ${{ vars.PHONE_SSH_USER }}
+          PHONE_DEPLOY_PATH: ${{ vars.PHONE_DEPLOY_PATH }}
         run: |
           ssh -i ~/.ssh/phone_deploy_key -p "${PHONE_SSH_PORT:-10022}" \
             "${PHONE_SSH_USER:-Ubuntu}@${PHONE_SSH_HOST}" \
