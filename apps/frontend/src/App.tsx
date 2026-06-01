@@ -89,6 +89,7 @@ export default function App() {
   const [scope, setScope] = useState<BankScope>("public");
   const [mode, setMode] = useState<"config" | "practice">("config");
   const [questionIndex, setQuestionIndex] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [feedback, setFeedback] = useState("");
   const [language, setLanguage] = useState<Language>("python");
@@ -136,6 +137,17 @@ export default function App() {
     const timer = window.setInterval(() => void refreshSubmissions(), 1000);
     return () => window.clearInterval(timer);
   }, [submissions]);
+
+  useEffect(() => {
+    if (mode !== "practice") return;
+    setRemainingSeconds((activeSuite?.durationMinutes || 10) * 60);
+  }, [mode, activeSuite?.durationMinutes, activeSuiteId]);
+
+  useEffect(() => {
+    if (mode !== "practice" || remainingSeconds <= 0) return;
+    const timer = window.setInterval(() => setRemainingSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [mode, remainingSeconds]);
 
   async function bootstrap() {
     try {
@@ -298,6 +310,33 @@ export default function App() {
     );
   }
 
+  if (mode === "practice") {
+    return (
+      <PracticePanel
+        suite={activeSuite}
+        questions={activeQuestions}
+        questionIndex={questionIndex}
+        currentQuestion={currentQuestion}
+        answers={answers}
+        feedback={feedback}
+        language={language}
+        sourceCode={sourceCode}
+        submissions={submissions}
+        isSubmitting={isSubmitting}
+        selectedProblem={selectedProblem}
+        remainingSeconds={remainingSeconds}
+        onBack={() => setMode("config")}
+        onQuestionIndex={(index) => { setQuestionIndex(index); setFeedback(""); }}
+        onAnswer={(questionId, value) => setAnswers({ ...answers, [questionId]: value })}
+        onSubmitNonCoding={submitNonCoding}
+        onLanguage={setLanguage}
+        onSourceCode={setSourceCode}
+        onSubmitCode={() => void submitCode()}
+        onRefresh={() => void refreshSubmissions()}
+      />
+    );
+  }
+
   return (
     <main className="app-shell" style={{ gridTemplateColumns: `${sidebarWidth}px 8px minmax(0, 1fr)` }}>
       <aside className="sidebar">
@@ -396,29 +435,7 @@ export default function App() {
             suiteTitle={newSuiteTitle[scope]}
             onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, [scope]: value })}
           />
-        ) : (
-          <PracticePanel
-            suite={activeSuite}
-            questions={activeQuestions}
-            questionIndex={questionIndex}
-            currentQuestion={currentQuestion}
-            answers={answers}
-            feedback={feedback}
-            language={language}
-            sourceCode={sourceCode}
-            submissions={submissions}
-            isSubmitting={isSubmitting}
-            selectedProblem={selectedProblem}
-            onBack={() => setMode("config")}
-            onQuestionIndex={(index) => { setQuestionIndex(index); setFeedback(""); }}
-            onAnswer={(questionId, value) => setAnswers({ ...answers, [questionId]: value })}
-            onSubmitNonCoding={submitNonCoding}
-            onLanguage={setLanguage}
-            onSourceCode={setSourceCode}
-            onSubmitCode={() => void submitCode()}
-            onRefresh={() => void refreshSubmissions()}
-          />
-        )}
+        ) : null}
       </section>
     </main>
   );
@@ -601,6 +618,7 @@ function PracticePanel(props: {
   submissions: Submission[];
   isSubmitting: boolean;
   selectedProblem?: Problem;
+  remainingSeconds: number;
   onBack: () => void;
   onQuestionIndex: (index: number) => void;
   onAnswer: (questionId: string, value: unknown) => void;
@@ -611,25 +629,44 @@ function PracticePanel(props: {
   onRefresh: () => void;
 }) {
   const question = props.currentQuestion;
+  const answeredCount = props.questions.filter((item) => {
+    const value = props.answers[item.id];
+    return value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0);
+  }).length;
+  const progress = props.questions.length ? Math.round((answeredCount / props.questions.length) * 100) : 0;
   return (
-    <>
-      <header className="hero-bar compact">
+    <main className="practice-fullscreen">
+      <header className="practice-topbar">
         <div>
           <p className="eyebrow">Practice</p>
           <h2>{props.suite?.title || "Practice Suite"}</h2>
-          <p>Question {props.questionIndex + 1} / {props.questions.length || 0}</p>
         </div>
-        <button className="secondary" onClick={props.onBack}>Back to Suite Config</button>
+        <div className="practice-status">
+          <div className="timer-card"><span>Time Left</span><strong>{formatSeconds(props.remainingSeconds)}</strong></div>
+          <div className="timer-card"><span>Progress</span><strong>{progress}%</strong></div>
+          <button className="secondary" onClick={props.onBack}>Exit Practice</button>
+        </div>
       </header>
+      <div className="practice-progress"><span style={{ width: `${progress}%` }} /></div>
       <section className="practice-layout">
         <aside className="question-nav">
-          {props.questions.map((item, index) => <button key={item.id} className={index === props.questionIndex ? "active" : ""} onClick={() => props.onQuestionIndex(index)}>{index + 1}. {item.type}</button>)}
+          <strong>Questions</strong>
+          {props.questions.map((item, index) => {
+            const value = props.answers[item.id];
+            const answered = value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0);
+            return <button key={item.id} className={`${index === props.questionIndex ? "active" : ""} ${answered ? "answered" : ""}`} onClick={() => props.onQuestionIndex(index)}><span>{index + 1}</span><em>{item.type}</em></button>;
+          })}
         </aside>
         <section className="panel practice-card">
           {question ? <QuestionRenderer {...props} question={question} /> : <div className="empty-state">This suite has no questions yet.</div>}
+          <div className="practice-footer">
+            <button className="secondary" disabled={props.questionIndex === 0} onClick={() => props.onQuestionIndex(props.questionIndex - 1)}>Previous</button>
+            <span>Question {props.questionIndex + 1} of {props.questions.length || 0}</span>
+            <button disabled={props.questionIndex >= props.questions.length - 1} onClick={() => props.onQuestionIndex(props.questionIndex + 1)}>Next</button>
+          </div>
         </section>
       </section>
-    </>
+    </main>
   );
 }
 
@@ -750,4 +787,10 @@ function pickSuiteTopicId(nodes: TopicNode[], targetScope: BankScope, preferredI
 function formatSubmission(submission: Submission) {
   if (!submission.result) return "Waiting for runner...";
   return [submission.result.stdout, submission.result.stderr, ...submission.result.testcaseResults.map((item) => `${item.testcaseId}: ${item.status}${item.stderr ? ` - ${item.stderr}` : ""}`)].filter(Boolean).join("\n") || "Judge finished.";
+}
+
+function formatSeconds(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+  const seconds = Math.floor(totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }
