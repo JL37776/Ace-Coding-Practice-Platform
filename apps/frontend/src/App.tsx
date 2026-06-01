@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { AuthSession, BankScope, Language, Problem, Question, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
 import { api, clearAuthToken, setAuthToken } from "./api";
 import "./styles.css";
@@ -37,6 +37,46 @@ title=JavaScript and TypeScript can both run through the Node runner.
 answer=true
 tags=runner`;
 
+const aiPromptTemplate = `You are generating one complete practice suite for Ace Practice.
+
+Return ONLY raw text in the exact parser format below. Do not use Markdown fences.
+
+Rules:
+- The suite belongs to the selected topic and must be self-contained.
+- Supported question types only: single, multiple, boolean, blank, coding.
+- Use a balanced mix unless the user asks for only one type.
+- Every non-coding question must include answer= and explanation=.
+- single: provide A=, B=, C= or more options, answer=A.
+- multiple: provide options, answer=A,C.
+- boolean: answer=true or answer=false.
+- blank: answer=exact expected text.
+- coding: include title, description, tags, and a short starter requirement. Keep it runnable later by the code runner.
+- Difficulty should match the requested learner level.
+- Generate realistic interview/training questions, not vague trivia.
+
+Format:
+@suite
+title=<suite title>
+description=<what this suite trains>
+duration=<minutes>
+
+@q
+type=single
+title=<question>
+A=<option>
+B=<option>
+C=<option>
+answer=<option id>
+explanation=<why>
+tags=<comma,separated,tags>
+
+@q
+type=boolean
+title=<statement>
+answer=true
+explanation=<why>
+tags=<comma,separated,tags>`;
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [topics, setTopics] = useState<TopicNode[]>([]);
@@ -59,11 +99,13 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [rawText, setRawText] = useState(defaultRaw);
   const [rawPreview, setRawPreview] = useState("");
+  const [rawParsedQuestions, setRawParsedQuestions] = useState<Question[]>([]);
   const [editorMessage, setEditorMessage] = useState("");
   const [newTopicName, setNewTopicName] = useState<Record<BankScope, string>>({ public: "", personal: "" });
   const [newSuiteTitle, setNewSuiteTitle] = useState<Record<BankScope, string>>({ public: "", personal: "" });
   const [openBank, setOpenBank] = useState<Record<BankScope, boolean>>({ public: true, personal: true });
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({});
+  const [sidebarWidth, setSidebarWidth] = useState(360);
 
   const publicTopics = topics.filter((topic) => topic.scope === "public");
   const personalTopics = topics.filter((topic) => topic.scope === "personal");
@@ -149,10 +191,7 @@ export default function App() {
   async function addSuite(targetScope: BankScope) {
     const title = newSuiteTitle[targetScope].trim();
     if (!title) return;
-    const targetTopicId =
-      scope === targetScope && flattenTopics(topics).some((topic) => topic.id === activeTopicId && topic.scope === targetScope)
-        ? activeTopicId
-        : flattenTopics(topics).find((topic) => topic.scope === targetScope)?.id;
+    const targetTopicId = pickSuiteTopicId(topics, targetScope, scope === targetScope ? activeTopicId : undefined);
     if (!targetTopicId) return;
     const suite = await api.createSuite({
       scope: targetScope,
@@ -170,14 +209,18 @@ export default function App() {
   }
 
   async function parseRaw() {
+    if (!activeTopicId) return;
     const parsed = await api.parseTopicRaw({ scope, topicId: activeTopicId, raw: rawText });
     setRawPreview(JSON.stringify(parsed, null, 2));
+    setRawParsedQuestions(parsed.questions);
     setEditorMessage(`Parsed ${parsed.questions.length} questions for ${parsed.suite.title}.`);
   }
 
   async function importRaw() {
+    if (!activeTopicId) return;
     const imported = await api.importTopicRaw({ scope, topicId: activeTopicId, raw: rawText });
     setActiveSuiteId(imported.suite.id);
+    setRawParsedQuestions(imported.questions);
     setEditorMessage(`Imported ${imported.questions.length} questions into ${imported.suite.title}.`);
     await refreshWorkspace();
   }
@@ -212,6 +255,31 @@ export default function App() {
     setMode("config");
   }
 
+  function selectFolder(targetScope: BankScope, topic: TopicNode) {
+    const firstSuite = getTopicSuiteItems(topic, suites.filter((suite) => suite.scope === targetScope))[0];
+    setScope(targetScope);
+    setActiveTopicId(firstSuite?.topicId || topic.id);
+    setActiveSuiteId(firstSuite?.id || "");
+    setOpenTopics({ ...openTopics, [topic.id]: true });
+    setMode("config");
+  }
+
+  function startSidebarResize(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    const move = (moveEvent: MouseEvent) => {
+      const next = Math.min(620, Math.max(280, startWidth + moveEvent.clientX - startX));
+      setSidebarWidth(next);
+    };
+    const stop = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", stop);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", stop);
+  }
+
   if (!user) {
     return (
       <main className="auth-shell">
@@ -231,7 +299,7 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" style={{ gridTemplateColumns: `${sidebarWidth}px 8px minmax(0, 1fr)` }}>
       <aside className="sidebar">
         <div className="brand-row">
           <div><p className="eyebrow">Ace Practice</p><h1>Training</h1></div>
@@ -254,7 +322,14 @@ export default function App() {
           onToggleBank={() => setOpenBank({ ...openBank, public: !openBank.public })}
           onToggleTopic={(id) => setOpenTopics({ ...openTopics, [id]: !openTopics[id] })}
           onSelectTopic={selectTopic}
-          onSelectSuite={(id) => { setScope("public"); setActiveSuiteId(id); setMode("config"); }}
+          onSelectFolder={selectFolder}
+          onSelectSuite={(id) => {
+            const selected = suites.find((suite) => suite.id === id);
+            setScope("public");
+            setActiveTopicId(selected?.topicId || activeTopicId);
+            setActiveSuiteId(id);
+            setMode("config");
+          }}
           onTopicName={(value) => setNewTopicName({ ...newTopicName, public: value })}
           onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, public: value })}
           onAddTopic={() => void addTopic("public")}
@@ -276,20 +351,29 @@ export default function App() {
           onToggleBank={() => setOpenBank({ ...openBank, personal: !openBank.personal })}
           onToggleTopic={(id) => setOpenTopics({ ...openTopics, [id]: !openTopics[id] })}
           onSelectTopic={selectTopic}
-          onSelectSuite={(id) => { setScope("personal"); setActiveSuiteId(id); setMode("config"); }}
+          onSelectFolder={selectFolder}
+          onSelectSuite={(id) => {
+            const selected = suites.find((suite) => suite.id === id);
+            setScope("personal");
+            setActiveTopicId(selected?.topicId || activeTopicId);
+            setActiveSuiteId(id);
+            setMode("config");
+          }}
           onTopicName={(value) => setNewTopicName({ ...newTopicName, personal: value })}
           onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, personal: value })}
           onAddTopic={() => void addTopic("personal")}
           onAddSuite={() => void addSuite("personal")}
         />
       </aside>
+      <div className="sidebar-resizer" onMouseDown={startSidebarResize} aria-label="Resize sidebar" />
 
       <section className="workspace">
-        {mode === "config" ? (
+        {mode === "config" && activeSuite ? (
           <SuiteConfig
             scope={scope}
             activeSuite={activeSuite}
             activeQuestions={activeQuestions}
+            rawParsedQuestions={rawParsedQuestions}
             activeTopicId={activeTopicId}
             rawText={rawText}
             rawPreview={rawPreview}
@@ -297,11 +381,20 @@ export default function App() {
             onRawText={setRawText}
             onParseRaw={() => void parseRaw()}
             onImportRaw={() => void importRaw()}
+            aiPromptTemplate={aiPromptTemplate}
             onPractice={() => {
               setQuestionIndex(0);
               setFeedback("");
               setMode("practice");
             }}
+          />
+        ) : mode === "config" ? (
+          <EmptySuiteState
+            scope={scope}
+            canAdd={scope === "personal" || user.role === "admin"}
+            onAddSuite={() => void addSuite(scope)}
+            suiteTitle={newSuiteTitle[scope]}
+            onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, [scope]: value })}
           />
         ) : (
           <PracticePanel
@@ -347,6 +440,7 @@ function BankPanel(props: {
   onToggleBank: () => void;
   onToggleTopic: (id: string) => void;
   onSelectTopic: (scope: BankScope, id: string) => void;
+  onSelectFolder: (scope: BankScope, topic: TopicNode) => void;
   onSelectSuite: (id: string) => void;
   onTopicName: (value: string) => void;
   onSuiteTitle: (value: string) => void;
@@ -374,6 +468,7 @@ function BankPanel(props: {
                 openTopics={props.openTopics}
                 onToggleTopic={props.onToggleTopic}
                 onSelectTopic={props.onSelectTopic}
+                onSelectFolder={props.onSelectFolder}
                 onSelectSuite={props.onSelectSuite}
               />
             )) : <div className="bank-empty">No topics yet.</div>}
@@ -399,29 +494,32 @@ function TopicNodeView(props: {
   openTopics: Record<string, boolean>;
   onToggleTopic: (id: string) => void;
   onSelectTopic: (scope: BankScope, id: string) => void;
+  onSelectFolder: (scope: BankScope, topic: TopicNode) => void;
   onSelectSuite: (id: string) => void;
 }) {
   const open = props.openTopics[props.topic.id] ?? true;
-  const topicSuites = props.suites.filter((suite) => suite.topicId === props.topic.id);
+  const topicSuites = getTopicSuiteItems(props.topic, props.suites);
   const hasChildren = Boolean(props.topic.children?.length || topicSuites.length);
+  const isActiveFolder = !props.activeSuiteId && props.topic.id === props.activeTopicId;
   return (
     <div>
-      <div className={props.topic.id === props.activeTopicId ? "topic-row active" : "topic-row"}>
+      <div className={isActiveFolder ? "topic-row active" : "topic-row"}>
         <button className="collapse-button" onClick={() => props.onToggleTopic(props.topic.id)}>{hasChildren ? (open ? "-" : "+") : ""}</button>
-        <button className="topic-main" onClick={() => props.onSelectTopic(props.scope, props.topic.id)}>
+        <button className="topic-main" onClick={() => props.onSelectFolder(props.scope, props.topic)}>
           <strong>{props.topic.name}</strong>
           <span>{props.topic.scorePercent}% ({props.topic.done}/{props.topic.total})</span>
         </button>
       </div>
       {open && (
         <div className="child-topic">
-          {props.topic.children?.map((child) => <TopicNodeView key={child.id} {...props} topic={child} />)}
           {topicSuites.map((suite) => (
             <button key={suite.id} className={suite.id === props.activeSuiteId ? "suite-tree-item active" : "suite-tree-item"} onClick={() => props.onSelectSuite(suite.id)}>
               <strong>{suite.title}</strong>
               <span>{suite.scorePercent}% ({suite.done}/{suite.total})</span>
+              <small>{suite.questionCount} questions | {suite.allowedTypes.join(", ")}</small>
             </button>
           ))}
+          {!topicSuites.length && <button className="suite-tree-item add-suite-row" onClick={() => props.onSelectTopic(props.scope, props.topic.id)}>+ Add suite</button>}
         </div>
       )}
     </div>
@@ -432,10 +530,12 @@ function SuiteConfig(props: {
   scope: BankScope;
   activeSuite?: TrainingSuite;
   activeQuestions: Question[];
+  rawParsedQuestions: Question[];
   activeTopicId: string;
   rawText: string;
   rawPreview: string;
   editorMessage: string;
+  aiPromptTemplate: string;
   onRawText: (value: string) => void;
   onParseRaw: () => void;
   onImportRaw: () => void;
@@ -465,11 +565,16 @@ function SuiteConfig(props: {
             <label>Question Count<input value={`${props.activeSuite?.questionCount || props.activeQuestions.length} questions`} readOnly /></label>
           </div>
           <div className="type-row">{(props.activeSuite?.allowedTypes || ["single", "multiple", "boolean", "blank", "coding"]).map((type) => <span key={type}>{type}</span>)}</div>
+          {props.rawParsedQuestions.length > 0 && <RawQuestionSummary questions={props.rawParsedQuestions} />}
           <div className="question-list">{props.activeQuestions.map((question, index) => <article key={question.id}><strong>{index + 1}. {question.title}</strong><span>{question.type} | {question.difficulty}</span></article>)}</div>
         </section>
 
         <section className="panel raw-panel">
           <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI/generated raw content for one full suite. Parse, validate, import.</p></div><button className="secondary">AI Similar Questions</button></div>
+          <label className="prompt-template-label">
+            AI Prompt Template
+            <textarea className="prompt-template" value={props.aiPromptTemplate} readOnly />
+          </label>
           <textarea className="raw-editor" value={props.rawText} onChange={(event) => props.onRawText(event.target.value)} />
           <div className="actions"><button onClick={props.onParseRaw}>Parse</button><button className="secondary" onClick={props.onParseRaw}>Validate</button><button onClick={props.onImportRaw}>Import</button></div>
           {props.editorMessage && <div className="notice">{props.editorMessage}</div>}
@@ -525,6 +630,30 @@ function PracticePanel(props: {
   );
 }
 
+function EmptySuiteState(props: {
+  scope: BankScope;
+  canAdd: boolean;
+  suiteTitle: string;
+  onSuiteTitle: (value: string) => void;
+  onAddSuite: () => void;
+}) {
+  return (
+    <section className="panel empty-suite-panel">
+      <p className="eyebrow">{props.scope} bank</p>
+      <h2>No suite selected</h2>
+      <p>Topic is only a folder. Add a suite under it, then configure Paste Topic Raw, time, AI generation, and practice.</p>
+      {props.canAdd ? (
+        <div className="inline-add-suite">
+          <input placeholder="New suite title" value={props.suiteTitle} onChange={(event) => props.onSuiteTitle(event.target.value)} />
+          <button onClick={props.onAddSuite}>+ Add Suite</button>
+        </div>
+      ) : (
+        <div className="notice">Only admin can add public suites.</div>
+      )}
+    </section>
+  );
+}
+
 function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { question: Question }) {
   const value = props.answers[props.question.id];
   if (props.question.type === "coding") {
@@ -562,6 +691,31 @@ function MultiOptionList({ question, value, onAnswer }: { question: Question; va
   })}</div>;
 }
 
+function RawQuestionSummary({ questions }: { questions: Question[] }) {
+  const counts = questions.reduce<Record<string, number>>((acc, question) => {
+    acc[question.type] = (acc[question.type] || 0) + 1;
+    return acc;
+  }, {});
+  return (
+    <section className="raw-summary">
+      <div className="panel-heading">
+        <div>
+          <h3>Validated Questions</h3>
+          <p>{questions.length} questions parsed. Types: {Object.entries(counts).map(([type, count]) => `${type} ${count}`).join(", ")}</p>
+        </div>
+      </div>
+      <div className="raw-question-list">
+        {questions.map((question, index) => (
+          <article key={question.id}>
+            <strong>{index + 1}. {question.title}</strong>
+            <span>{question.type} | {question.difficulty} | {question.tags.join(", ") || "no tags"}</span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ResultList({ submissions }: { submissions: Submission[] }) {
   return <div className="submission-list">{submissions.slice(0, 4).map((submission) => <article key={submission.id} className="submission"><strong>{submission.status}</strong><span>{submission.language} | {new Date(submission.createdAt).toLocaleString()}</span><pre>{formatSubmission(submission)}</pre></article>)}</div>;
 }
@@ -573,6 +727,21 @@ function flattenTopics(nodes: TopicNode[]): TopicNode[] {
 function collectTopicIds(nodes: TopicNode[], topicId: string) {
   const topic = flattenTopics(nodes).find((item) => item.id === topicId);
   return new Set(topic ? [topic.id, ...flattenTopics(topic.children || []).map((item) => item.id)] : []);
+}
+
+function getTopicSuiteItems(topic: TopicNode, allSuites: TrainingSuite[]) {
+  const childIds = new Set((topic.children || []).map((child) => child.id));
+  return allSuites.filter((suite) => suite.topicId === topic.id || childIds.has(suite.topicId));
+}
+
+function pickSuiteTopicId(nodes: TopicNode[], targetScope: BankScope, preferredId?: string) {
+  const flat = flattenTopics(nodes).filter((topic) => topic.scope === targetScope);
+  if (preferredId) {
+    const preferred = flat.find((topic) => topic.id === preferredId);
+    if (preferred) return preferred.children?.[0]?.id || preferred.id;
+  }
+  const root = flat.find((topic) => !topic.parentId);
+  return root?.children?.[0]?.id || root?.id || flat[0]?.id;
 }
 
 function formatSubmission(submission: Submission) {

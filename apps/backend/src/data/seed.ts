@@ -100,6 +100,19 @@ export const suites: TrainingSuite[] = [
     done: 37,
     total: 50,
     allowedTypes: ["single", "multiple", "boolean", "blank"]
+  },
+  {
+    id: "suite-basic-noncoding-sample",
+    scope: "public",
+    topicId: "topic-backend",
+    title: "Basic Choice and Blank Sample",
+    description: "Simple test suite with three single-choice questions and three fill-in-the-blank questions.",
+    questionCount: 6,
+    durationMinutes: 10,
+    scorePercent: 0,
+    done: 0,
+    total: 6,
+    allowedTypes: ["single", "blank"]
   }
 ];
 
@@ -166,6 +179,99 @@ export const questions: Question[] = [
     ],
     answer: "A",
     explanation: "SRP keeps a class focused on one responsibility.",
+    metadata: {}
+  },
+  {
+    id: "question-basic-single-1",
+    scope: "public",
+    suiteId: "suite-basic-noncoding-sample",
+    type: "single",
+    title: "Which HTTP method is normally used to create a new resource?",
+    difficulty: "easy",
+    tags: ["http", "backend"],
+    media: [],
+    options: [
+      { id: "A", text: "GET" },
+      { id: "B", text: "POST" },
+      { id: "C", text: "DELETE" }
+    ],
+    answer: "B",
+    explanation: "POST is commonly used to submit data that creates a new resource.",
+    metadata: {}
+  },
+  {
+    id: "question-basic-single-2",
+    scope: "public",
+    suiteId: "suite-basic-noncoding-sample",
+    type: "single",
+    title: "Which data structure stores key-value pairs?",
+    difficulty: "easy",
+    tags: ["data-structure"],
+    media: [],
+    options: [
+      { id: "A", text: "Stack" },
+      { id: "B", text: "Queue" },
+      { id: "C", text: "Map" }
+    ],
+    answer: "C",
+    explanation: "A map stores values by key.",
+    metadata: {}
+  },
+  {
+    id: "question-basic-single-3",
+    scope: "public",
+    suiteId: "suite-basic-noncoding-sample",
+    type: "single",
+    title: "Which status code usually means the request succeeded?",
+    difficulty: "easy",
+    tags: ["http"],
+    media: [],
+    options: [
+      { id: "A", text: "200" },
+      { id: "B", text: "404" },
+      { id: "C", text: "500" }
+    ],
+    answer: "A",
+    explanation: "HTTP 200 indicates a successful request.",
+    metadata: {}
+  },
+  {
+    id: "question-basic-blank-1",
+    scope: "public",
+    suiteId: "suite-basic-noncoding-sample",
+    type: "blank",
+    title: "Fill in the blank: SQL command used to read rows from a table is ____.",
+    difficulty: "easy",
+    tags: ["sql"],
+    media: [],
+    answer: "SELECT",
+    explanation: "SELECT reads rows from one or more tables.",
+    metadata: {}
+  },
+  {
+    id: "question-basic-blank-2",
+    scope: "public",
+    suiteId: "suite-basic-noncoding-sample",
+    type: "blank",
+    title: "Fill in the blank: The JavaScript keyword for declaring a constant is ____.",
+    difficulty: "easy",
+    tags: ["javascript"],
+    media: [],
+    answer: "const",
+    explanation: "const declares a block-scoped constant binding.",
+    metadata: {}
+  },
+  {
+    id: "question-basic-blank-3",
+    scope: "public",
+    suiteId: "suite-basic-noncoding-sample",
+    type: "blank",
+    title: "Fill in the blank: A function that calls itself is called ____.",
+    difficulty: "easy",
+    tags: ["programming"],
+    media: [],
+    answer: "recursive",
+    explanation: "A recursive function calls itself directly or indirectly.",
     metadata: {}
   }
 ];
