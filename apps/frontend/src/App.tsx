@@ -451,7 +451,8 @@ function BankPanel(props: {
   return (
     <section className="bank-section">
       <button className="bank-heading" onClick={props.onToggleBank}>
-        <strong>{props.open ? "[-]" : "[+]"} {props.title}</strong>
+        <span className={props.open ? "chevron open" : "chevron"} aria-hidden="true" />
+        <strong>{props.title}</strong>
         {disabled && <span>admin edit</span>}
       </button>
       {props.open && (
@@ -504,7 +505,9 @@ function TopicNodeView(props: {
   return (
     <div>
       <div className={isActiveFolder ? "topic-row active" : "topic-row"}>
-        <button className="collapse-button" onClick={() => props.onToggleTopic(props.topic.id)}>{hasChildren ? (open ? "-" : "+") : ""}</button>
+        <button className="collapse-button" onClick={() => props.onToggleTopic(props.topic.id)} aria-label={open ? "Collapse topic" : "Expand topic"}>
+          {hasChildren && <span className={open ? "chevron open" : "chevron"} aria-hidden="true" />}
+        </button>
         <button className="topic-main" onClick={() => props.onSelectFolder(props.scope, props.topic)}>
           <strong>{props.topic.name}</strong>
           <span>{props.topic.scorePercent}% ({props.topic.done}/{props.topic.total})</span>

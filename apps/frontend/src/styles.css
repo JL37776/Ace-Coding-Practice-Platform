@@ -113,12 +113,33 @@ select {
 }
 
 .sidebar-resizer {
-  background: #e2e8f0;
+  position: relative;
+  background: linear-gradient(90deg, #dbe4ef, #f8fafc);
   cursor: col-resize;
 }
 
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 68px;
+  border-radius: 999px;
+  background: #94a3b8;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+  transform: translate(-50%, -50%);
+  transition: height 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
 .sidebar-resizer:hover {
-  background: #93c5fd;
+  background: linear-gradient(90deg, #bfdbfe, #eff6ff);
+}
+
+.sidebar-resizer:hover::after {
+  height: 96px;
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
 
 .brand-row,
@@ -199,9 +220,9 @@ p {
 }
 
 .bank-heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   width: 100%;
   border: 0;
@@ -209,6 +230,26 @@ p {
   color: white;
   padding: 0;
   text-align: left;
+}
+
+.chevron {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  color: #93c5fd;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.chevron.open {
+  transform: rotate(45deg);
+}
+
+.bank-heading:hover .chevron,
+.collapse-button:hover .chevron {
+  color: white;
 }
 
 .bank-heading span,
@@ -273,7 +314,7 @@ p {
 }
 
 .topic-row {
-  grid-template-columns: 28px 1fr;
+  grid-template-columns: 34px 1fr;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -297,6 +338,10 @@ p {
   border-right: 1px solid rgba(148, 163, 184, 0.16);
 }
 
+.collapse-button:empty {
+  cursor: default;
+}
+
 .topic-main {
   display: grid;
   gap: 4px;
@@ -310,7 +355,19 @@ p {
 }
 
 .child-topic {
-  margin: 8px 0 0 18px;
+  position: relative;
+  margin: 8px 0 0 16px;
+  padding-left: 18px;
+}
+
+.child-topic::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 6px;
+  left: 0;
+  width: 1px;
+  background: linear-gradient(#334155, rgba(51, 65, 85, 0));
 }
 
 .suite-tree-item {
