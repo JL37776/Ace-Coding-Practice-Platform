@@ -111,5 +111,5 @@ jobs:
           infra/deploy/phone/start-ace-coding.sh
           infra/deploy/phone/start-aws-9999-tunnel.sh
           curl -fsS http://127.0.0.1:3100/api/health >/dev/null
-          curl -fsS http://127.0.0.1:8080/ >/dev/null
+          curl -fsS http://127.0.0.1:8080/api/health >/dev/null
           REMOTE
