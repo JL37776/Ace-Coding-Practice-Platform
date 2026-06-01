@@ -18,15 +18,20 @@ const workRoot = process.env.RUNNER_WORK_ROOT || tmpdir();
 const maxBytes = Number(process.env.RUNNER_MAX_OUTPUT_BYTES || 8000);
 const commandTimeoutMs = Number(process.env.RUNNER_TIMEOUT_MS || 6000);
 
-const languageCommands: Record<Language, string[]> = {
-  python: ["python3", "--version"],
-  javascript: ["node", "--version"],
-  typescript: ["node", "--version"],
-  sql: ["sqlite3", "--version"],
-  csharp: ["dotnet", "--version"],
-  java: ["javac", "-version"]
+const pythonCommands = process.platform === "win32"
+  ? [["python", "--version"], ["py", "-3", "--version"]]
+  : [["python3", "--version"], ["python", "--version"]];
+
+const languageCommands: Record<Language, string[][]> = {
+  python: pythonCommands,
+  javascript: [["node", "--version"]],
+  typescript: [["node", "--version"]],
+  sql: [["sqlite3", "--version"]],
+  csharp: [["dotnet", "--version"]],
+  java: [["javac", "-version"]]
 };
 
+const runtimeCommands = new Map<Language, string[]>();
 const supportedLanguages = await detectSupportedLanguages();
 if (supportedLanguages.length === 0) {
   throw new Error("No supported runtimes found. Install at least python3 or node on the runner server.");
@@ -55,9 +60,15 @@ while (true) {
 
 async function detectSupportedLanguages(): Promise<Language[]> {
   const results: Language[] = [];
-  for (const [language, command] of Object.entries(languageCommands) as Array<[Language, string[]]>) {
-    const result = await run(command[0], command.slice(1), { timeoutMs: 2500 });
-    if (result.status === "accepted") results.push(language);
+  for (const [language, commands] of Object.entries(languageCommands) as Array<[Language, string[][]]>) {
+    for (const command of commands) {
+      const result = await run(command[0], command.slice(1), { timeoutMs: 2500 });
+      if (result.status === "accepted") {
+        runtimeCommands.set(language, command);
+        results.push(language);
+        break;
+      }
+    }
   }
   return results;
 }
@@ -144,7 +155,8 @@ print(json.dumps({"status":overall,"stdout":"","stderr":"","testcaseResults":res
 `,
     "utf8"
   );
-  return normalizeHarnessResult(await run("python3", [harnessPath], { cwd: workdir }), started);
+  const command = requiredRuntime("python");
+  return normalizeHarnessResult(await run(command[0], [...command.slice(1), harnessPath], { cwd: workdir }), started);
 }
 
 async function judgeJavaScript(job: JudgeJob, workdir: string, started: number): Promise<JudgeResult> {
@@ -197,12 +209,14 @@ try {
 `,
     "utf8"
   );
-  return normalizeHarnessResult(await run("node", [harnessPath], { cwd: workdir }), started);
+  const command = requiredRuntime("javascript");
+  return normalizeHarnessResult(await run(command[0], [...command.slice(1), harnessPath], { cwd: workdir }), started);
 }
 
 async function judgeSql(job: JudgeJob, workdir: string, started: number): Promise<JudgeResult> {
   await writeFile(join(workdir, "solution.sql"), job.submission.sourceCode, "utf8");
-  const output = await run("sqlite3", [":memory:", ".read solution.sql"], { cwd: workdir });
+  const command = requiredRuntime("sql");
+  const output = await run(command[0], [...command.slice(1), ":memory:", ".read solution.sql"], { cwd: workdir });
   return {
     status: output.status,
     stdout: output.stdout,
@@ -227,13 +241,15 @@ async function judgeCSharp(job: JudgeJob, workdir: string, started: number): Pro
 `,
     "utf8"
   );
-  const output = await run("dotnet", ["run", "--project", workdir], { cwd: workdir, timeoutMs: commandTimeoutMs * 2 });
+  const command = requiredRuntime("csharp");
+  const output = await run(command[0], [...command.slice(1), "run", "--project", workdir], { cwd: workdir, timeoutMs: commandTimeoutMs * 2 });
   return simpleProcessResult(output, job.testCases, started);
 }
 
 async function judgeJava(job: JudgeJob, workdir: string, started: number): Promise<JudgeResult> {
   await writeFile(join(workdir, "Main.java"), job.submission.sourceCode, "utf8");
-  const compile = await run("javac", ["Main.java"], { cwd: workdir });
+  const command = requiredRuntime("java");
+  const compile = await run(command[0], [...command.slice(1), "Main.java"], { cwd: workdir });
   if (compile.status !== "accepted") return simpleProcessResult({ ...compile, status: "compile_error" }, job.testCases, started);
   return simpleProcessResult(await run("java", ["Main"], { cwd: workdir }), job.testCases, started);
 }
@@ -284,7 +300,7 @@ interface ProcessOutput {
 
 function run(command: string, args: string[], options: { cwd?: string; timeoutMs?: number } = {}): Promise<ProcessOutput> {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd: options.cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { cwd: options.cwd, env: childEnv(), stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => child.kill("SIGKILL"), options.timeoutMs || commandTimeoutMs);
@@ -307,6 +323,23 @@ function run(command: string, args: string[], options: { cwd?: string; timeoutMs
       });
     });
   });
+}
+
+function requiredRuntime(language: Language) {
+  const command = runtimeCommands.get(language);
+  if (!command) throw new Error(`No runtime detected for ${language}`);
+  return command;
+}
+
+function childEnv() {
+  return {
+    PATH: process.env.PATH || "",
+    SystemRoot: process.env.SystemRoot || "",
+    WINDIR: process.env.WINDIR || "",
+    TEMP: process.env.TEMP || "",
+    TMP: process.env.TMP || "",
+    HOME: process.env.HOME || ""
+  };
 }
 
 function requestHeaders() {

@@ -3,6 +3,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { z } from "zod";
 import type { BankScope, JudgeResult, Question, QuestionType, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
 import * as authStore from "./auth-store.js";
+import { config } from "./config.js";
 import { createJudgeProvider } from "./judge/index.js";
 import { store } from "./store.js";
 
@@ -341,6 +342,10 @@ export function createApiRouter() {
         updatedAt: now
       };
       store.saveSubmission(submission);
+
+      if (config.judgeProvider === "remote-runner") {
+        return res.status(202).json({ data: submission });
+      }
 
       queueMicrotask(async () => {
         const running = { ...submission, status: "running" as const, updatedAt: new Date().toISOString() };

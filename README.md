@@ -158,6 +158,8 @@ java        requires javac and java
 
 Isolation on the server runner is process-level only: per-job temp directories, timeout, output truncation, and no long-lived user files. This is acceptable for controlled practice workloads, but not enough for hostile public submissions. For stronger isolation later, move runners to Docker/gVisor/Firecracker on a dedicated Linux host.
 
+When Docker is not available, run the server runner only under a dedicated low-privilege OS user and keep untrusted public submissions disabled. The runner clears most inherited environment variables before executing submitted code, but submitted code can still access files and network resources available to that OS user unless the host provides an additional sandbox such as systemd hardening, bubblewrap, nsjail, gVisor, or a separate VM.
+
 Next natural steps:
 
 - persist problems and submissions in PostgreSQL
