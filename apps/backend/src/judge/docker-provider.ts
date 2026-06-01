@@ -11,7 +11,16 @@ export class DockerJudgeProvider implements JudgeProvider {
       throw new Error(`Problem not found for submission ${submission.id}`);
     }
 
-    const image = config.docker.images[submission.language];
+    const image = config.docker.images[submission.language as keyof typeof config.docker.images];
+    if (!image) {
+      return {
+        status: "system_error",
+        stdout: "",
+        stderr: `Docker judge image is not configured for ${submission.language}`,
+        durationMs: 0,
+        testcaseResults: []
+      };
+    }
     const started = Date.now();
 
     try {

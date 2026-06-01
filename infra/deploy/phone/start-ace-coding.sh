@@ -48,3 +48,7 @@ nohup env VITE_API_PROXY_TARGET=http://127.0.0.1:3100 npm run preview -- --host 
 
 wait_http "http://127.0.0.1:3100/api/health"
 wait_http "http://127.0.0.1:8080/"
+
+if [ "${ACE_START_RUNNER:-1}" = "1" ]; then
+  "$APP_DIR/infra/deploy/phone/start-runner.sh"
+fi

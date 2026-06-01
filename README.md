@@ -110,10 +110,53 @@ Implemented now:
 
 - Python practice loop
 - JavaScript practice loop
+- TypeScript practice loop
+- remote phone runner queue
 - in-memory problems/submissions
 - exact-output testcase checking
 - Docker runner provider
 - Azure VM friendly Docker Compose deployment
+
+## Phone Runner
+
+The phone runner is for an Android Ubuntu environment where Docker is not available. It runs as a service, polls the backend queue, executes jobs for runtimes that exist on the phone, and posts results back.
+
+Backend config:
+
+```bash
+JUDGE_PROVIDER=remote-runner
+RUNNER_SHARED_TOKEN=change-me
+```
+
+Runner config:
+
+```bash
+BACKEND_URL=http://127.0.0.1:3100
+RUNNER_SHARED_TOKEN=change-me
+RUNNER_POLL_MS=1200
+RUNNER_TIMEOUT_MS=6000
+```
+
+Start on the phone:
+
+```bash
+npm install
+npm run build
+infra/deploy/phone/start-ace-coding.sh
+```
+
+The runner auto-detects available languages:
+
+```text
+python      requires python3
+javascript  requires node
+typescript  requires node; TypeScript transpiler is bundled in the runner package
+sql         requires sqlite3
+csharp      requires dotnet SDK
+java        requires javac and java
+```
+
+Isolation on the phone runner is process-level only: per-job temp directories, timeout, output truncation, and no long-lived user files. This is acceptable for your own practice device, but not enough for hostile public submissions. For stronger isolation later, move runners to Docker/gVisor/Firecracker on a real Linux host.
 
 Next natural steps:
 

@@ -1,0 +1,19 @@
+[Unit]
+Description=Ace Coding Practice Phone Runner
+After=network.target ace-coding-backend.service
+
+[Service]
+Type=simple
+User=Ubuntu
+WorkingDirectory=/opt/ace-coding/current/apps/runner
+Environment=NODE_ENV=production
+Environment=BACKEND_URL=http://127.0.0.1:3100
+Environment=RUNNER_POLL_MS=1200
+Environment=RUNNER_TIMEOUT_MS=6000
+EnvironmentFile=-/etc/ace-coding/runner.env
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

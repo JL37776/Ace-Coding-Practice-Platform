@@ -11,9 +11,9 @@
     "dev": "npm run dev --workspace @ace/backend",
     "dev:backend": "npm run dev --workspace @ace/backend",
     "dev:frontend": "npm run dev --workspace @ace/frontend",
-    "build": "npm run build --workspace @ace/shared && npm run build --workspace @ace/backend && npm run build --workspace @ace/frontend",
-    "lint": "npm run lint --workspace @ace/shared && npm run lint --workspace @ace/backend && npm run lint --workspace @ace/frontend",
-    "typecheck": "npm run typecheck --workspace @ace/shared && npm run typecheck --workspace @ace/backend && npm run typecheck --workspace @ace/frontend"
+    "build": "npm run build --workspace @ace/shared && npm run build --workspace @ace/backend && npm run build --workspace @ace/frontend && npm run build --workspace @ace/runner",
+    "lint": "npm run lint --workspace @ace/shared && npm run lint --workspace @ace/backend && npm run lint --workspace @ace/frontend && npm run lint --workspace @ace/runner",
+    "typecheck": "npm run typecheck --workspace @ace/shared && npm run typecheck --workspace @ace/backend && npm run typecheck --workspace @ace/frontend && npm run typecheck --workspace @ace/runner"
   },
   "engines": {
     "node": ">=20"

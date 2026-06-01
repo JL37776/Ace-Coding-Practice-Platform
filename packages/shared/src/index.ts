@@ -1,5 +1,8 @@
 export type ProblemType = "coding" | "sql" | "single_choice" | "multi_choice" | "short_answer";
+export type QuestionType = "single" | "multiple" | "boolean" | "blank" | "coding";
 export type Difficulty = "easy" | "medium" | "hard";
+export type Language = "python" | "typescript" | "javascript" | "sql" | "csharp" | "java";
+export type BankScope = "public" | "personal";
 export type SubmissionStatus =
   | "queued"
   | "running"
@@ -13,6 +16,8 @@ export type SubmissionStatus =
 
 export interface Problem {
   id: string;
+  scope: BankScope;
+  ownerUserId?: string;
   title: string;
   slug: string;
   type: ProblemType;
@@ -22,6 +27,80 @@ export interface Problem {
   configJson: Record<string, unknown>;
   version: number;
   published: boolean;
+}
+
+export interface User {
+  id: string;
+  username: string;
+  displayName: string;
+  role: "admin" | "member";
+}
+
+export interface SystemSettings {
+  allowedQuestionTypes: QuestionType[];
+  allowedLanguages: Language[];
+  aiQuestionGenerationEnabled: boolean;
+  defaultScoreFormat: "percent_fraction";
+}
+
+export interface AuthSession {
+  token: string;
+  user: User;
+}
+
+export interface TopicNode {
+  id: string;
+  scope: BankScope;
+  ownerUserId?: string;
+  name: string;
+  parentId?: string;
+  scorePercent: number;
+  done: number;
+  total: number;
+  children?: TopicNode[];
+}
+
+export interface TrainingSuite {
+  id: string;
+  scope: BankScope;
+  ownerUserId?: string;
+  topicId: string;
+  title: string;
+  description: string;
+  questionCount: number;
+  durationMinutes: number;
+  scorePercent: number;
+  done: number;
+  total: number;
+  allowedTypes: QuestionType[];
+}
+
+export interface QuestionOption {
+  id: string;
+  text: string;
+}
+
+export interface QuestionMedia {
+  type: "image" | "audio" | "video" | "file";
+  url: string;
+}
+
+export interface Question {
+  id: string;
+  scope: BankScope;
+  ownerUserId?: string;
+  suiteId: string;
+  type: QuestionType;
+  title: string;
+  description?: string;
+  difficulty: Difficulty;
+  tags: string[];
+  media: QuestionMedia[];
+  options?: QuestionOption[];
+  answer?: unknown;
+  explanation?: string;
+  problemId?: string;
+  metadata: Record<string, unknown>;
 }
 
 export interface TestCase {
@@ -36,8 +115,9 @@ export interface TestCase {
 
 export interface Submission {
   id: string;
+  userId: string;
   problemId: string;
-  language: "python" | "javascript";
+  language: Language;
   sourceCode: string;
   status: SubmissionStatus;
   result?: JudgeResult;

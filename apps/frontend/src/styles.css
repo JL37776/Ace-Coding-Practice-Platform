@@ -1,6 +1,6 @@
 :root {
-  color: #14213d;
-  background: #f7f8fb;
+  color: #172033;
+  background: #f5f7fb;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -13,32 +13,120 @@ body {
 }
 
 button,
+input,
 select,
 textarea {
   font: inherit;
 }
 
+button {
+  cursor: pointer;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-panel {
+  width: min(440px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 28px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 16px 50px rgba(30, 41, 59, 0.08);
+}
+
+.auth-panel label {
+  display: grid;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-panel input,
+select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: white;
+}
+
+.auth-panel button,
+.actions button,
+.secondary,
+.icon-button {
+  border: 1px solid #1d4ed8;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #1d4ed8;
+  color: white;
+  font-weight: 700;
+}
+
+.link-button,
+.secondary,
+.icon-button {
+  border-color: #cbd5e1;
+  background: white;
+  color: #334155;
+}
+
+.credential-card,
+.user-card,
+.score-card,
+.empty-state,
+.error-box {
+  display: grid;
+  gap: 4px;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.error-box {
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  white-space: pre-wrap;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 320px 1fr;
 }
 
-.problem-list {
-  background: #111827;
-  color: white;
-  padding: 24px;
+.sidebar {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  background: #0f172a;
+  color: white;
+}
+
+.brand-row,
+.hero-bar,
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 16px;
 }
 
 .eyebrow {
-  color: #93c5fd;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
   margin: 0 0 6px;
+  color: #3b82f6;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -49,114 +137,199 @@ p {
   margin-top: 0;
 }
 
-.problem {
-  border: 1px solid #374151;
-  border-radius: 8px;
-  background: #1f2937;
-  color: white;
-  padding: 14px;
-  text-align: left;
-  cursor: pointer;
+.user-card {
+  background: #1e293b;
+  color: #e2e8f0;
 }
 
-.problem.active {
-  border-color: #60a5fa;
-  background: #172554;
-}
-
-.problem span,
+.user-card span,
+.topic span,
+.suite-card span,
+.suite-card p,
+.suite-card em,
+.panel p,
 .submission span,
 .muted {
-  color: #6b7280;
-  display: block;
+  color: #64748b;
   font-size: 13px;
-  margin-top: 4px;
+}
+
+.scope-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.scope-switch button {
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px;
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+.scope-switch .active {
+  border-color: #60a5fa;
+  background: #2563eb;
+  color: white;
+}
+
+.tree-list {
+  display: grid;
+  gap: 8px;
+}
+
+.topic {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #273449;
+  border-radius: 8px;
+  padding: 12px;
+  background: #111827;
+  color: white;
+  text-align: left;
+}
+
+.topic.active {
+  border-color: #60a5fa;
+  background: #1d4ed8;
+}
+
+.topic span {
+  color: #cbd5e1;
+}
+
+.child-topic {
+  margin: 8px 0 0 18px;
 }
 
 .workspace {
-  padding: 28px;
   display: grid;
-  grid-template-rows: auto minmax(360px, 1fr) auto auto;
+  gap: 18px;
+  padding: 24px;
+}
+
+.hero-bar,
+.panel,
+.suite-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  padding: 18px;
+}
+
+.score-card {
+  min-width: 150px;
+  background: #0f172a;
+  color: white;
+  text-align: right;
+}
+
+.score-card span {
+  color: #cbd5e1;
+}
+
+.suite-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.suite-card {
+  display: grid;
+  gap: 8px;
+  color: #172033;
+  text-align: left;
+}
+
+.suite-card.active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
+}
+
+.suite-card em {
+  font-style: normal;
+  font-weight: 800;
+  color: #2563eb;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.85fr) minmax(420px, 1.15fr);
   gap: 18px;
 }
 
-.toolbar {
+.type-row {
   display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
 }
 
-.toolbar p {
-  color: #4b5563;
-  max-width: 780px;
+.type-row span {
+  border: 1px solid #dbe4ef;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
 }
 
-select,
-button {
-  border: 1px solid #d1d5db;
+.question-list,
+.submission-list {
+  display: grid;
+  gap: 10px;
+}
+
+.question-list article,
+.submission {
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background: white;
-  padding: 10px 12px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.runner-panel {
+  min-width: 0;
 }
 
 .editor {
   width: 100%;
-  min-height: 360px;
+  min-height: 300px;
   resize: vertical;
-  border: 1px solid #d1d5db;
+  border: 1px solid #1e293b;
   border-radius: 8px;
-  padding: 18px;
-  color: #e5e7eb;
-  background: #0b1120;
+  padding: 16px;
+  color: #e2e8f0;
+  background: #0f172a;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 .actions {
   display: flex;
   gap: 10px;
-}
-
-.actions button:first-child {
-  background: #2563eb;
-  color: white;
-  border-color: #2563eb;
-}
-
-.secondary {
-  color: #374151;
-}
-
-.submissions {
-  display: grid;
-  gap: 10px;
-}
-
-.submission {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: white;
-  padding: 14px;
+  margin-top: 12px;
 }
 
 .submission pre {
-  white-space: pre-wrap;
+  max-height: 160px;
+  overflow: auto;
   margin: 10px 0 0;
-  color: #374151;
+  white-space: pre-wrap;
+  color: #334155;
 }
 
-@media (max-width: 760px) {
-  .app-shell {
+@media (max-width: 980px) {
+  .app-shell,
+  .content-grid {
     grid-template-columns: 1fr;
   }
 
-  .problem-list {
-    min-height: auto;
-  }
-
-  .toolbar {
-    flex-direction: column;
+  .suite-grid {
+    grid-template-columns: 1fr;
   }
 }

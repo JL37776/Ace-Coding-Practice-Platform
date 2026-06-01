@@ -1,12 +1,35 @@
-import type { ApiEnvelope, CreateSubmissionInput, Problem, Submission } from "@ace/shared";
+import type {
+  ApiEnvelope,
+  AuthSession,
+  CreateSubmissionInput,
+  Problem,
+  Question,
+  Submission,
+  SystemSettings,
+  TopicNode,
+  TrainingSuite,
+  User
+} from "@ace/shared";
 
 const apiBase = import.meta.env.VITE_API_BASE_URL || "";
+let authToken = window.localStorage.getItem("ace_token") || "";
+
+export function setAuthToken(token: string) {
+  authToken = token;
+  window.localStorage.setItem("ace_token", token);
+}
+
+export function clearAuthToken() {
+  authToken = "";
+  window.localStorage.removeItem("ace_token");
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
     headers: {
       "content-type": "application/json",
+      ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
       ...(init?.headers || {})
     }
   });
@@ -16,6 +39,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  login: (input: { username: string; password: string }) =>
+    request<AuthSession>("/api/auth/login", { method: "POST", body: JSON.stringify(input) }),
+  register: (input: { username: string; password: string; displayName: string }) =>
+    request<AuthSession>("/api/auth/register", { method: "POST", body: JSON.stringify(input) }),
+  me: () => request<User>("/api/auth/me"),
+  settings: () => request<SystemSettings>("/api/settings"),
+  listTopics: () => request<TopicNode[]>("/api/topics"),
+  listSuites: (topicId?: string, scope?: "public" | "personal") => {
+    const params = new URLSearchParams();
+    if (topicId) params.set("topicId", topicId);
+    if (scope) params.set("scope", scope);
+    return request<TrainingSuite[]>(`/api/suites${params.size ? `?${params}` : ""}`);
+  },
+  listQuestions: (suiteId?: string, scope?: "public" | "personal") => {
+    const params = new URLSearchParams();
+    if (suiteId) params.set("suiteId", suiteId);
+    if (scope) params.set("scope", scope);
+    return request<Question[]>(`/api/questions${params.size ? `?${params}` : ""}`);
+  },
   listProblems: () => request<Problem[]>("/api/problems"),
   getProblem: (id: string) => request<Problem>(`/api/problems/${id}`),
   createSubmission: (input: CreateSubmissionInput) =>
