@@ -144,6 +144,8 @@ export default function App() {
   const [editingDescription, setEditingDescription] = useState<Record<string, string>>({});
   const [editingDuration, setEditingDuration] = useState<Record<string, string>>({});
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [modalOpen, setModalOpen] = useState<"topic" | "suite" | null>(null);
+  const [modalScope, setModalScope] = useState<BankScope>("public");
 
   const publicTopics = topics.filter((topic) => topic.scope === "public");
   const personalTopics = topics.filter((topic) => topic.scope === "personal");
@@ -478,6 +480,7 @@ export default function App() {
           onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, public: value })}
           onAddTopic={() => void addTopic("public")}
           onAddSuite={() => void addSuite("public")}
+          onOpenModal={(type, scope) => { setModalOpen(type); setModalScope(scope); }}
           onDeleteTopic={deleteTopic}
           onDeleteSuite={deleteSuite}
         />
@@ -509,6 +512,7 @@ export default function App() {
           onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, personal: value })}
           onAddTopic={() => void addTopic("personal")}
           onAddSuite={() => void addSuite("personal")}
+          onOpenModal={(type, scope) => { setModalOpen(type); setModalScope(scope); }}
           onDeleteTopic={deleteTopic}
           onDeleteSuite={deleteSuite}
         />
@@ -540,6 +544,7 @@ export default function App() {
             onEditDescription={(id, value) => setEditingDescription({ ...editingDescription, [id]: value })}
             onEditDuration={(id, value) => setEditingDuration({ ...editingDuration, [id]: value })}
             onSaveEdit={() => void saveEditedSuite()}
+            onDeleteSuite={deleteSuite}
             onPractice={() => {
               setQuestionIndex(0);
               setFeedback("");
@@ -557,7 +562,69 @@ export default function App() {
           />
         ) : null}
       </section>
+      <AddItemModal
+        type={modalOpen || "topic"}
+        scope={modalScope}
+        open={modalOpen !== null}
+        value={modalOpen === "topic" ? newTopicName[modalScope] : newSuiteTitle[modalScope]}
+        onValue={(value) => {
+          if (modalOpen === "topic") {
+            setNewTopicName({ ...newTopicName, [modalScope]: value });
+          } else {
+            setNewSuiteTitle({ ...newSuiteTitle, [modalScope]: value });
+          }
+        }}
+        onAdd={async () => {
+          if (modalOpen === "topic") {
+            await addTopic(modalScope);
+          } else {
+            await addSuite(modalScope);
+          }
+          setModalOpen(null);
+          setNewTopicName({ ...newTopicName, [modalScope]: "" });
+          setNewSuiteTitle({ ...newSuiteTitle, [modalScope]: "" });
+        }}
+        onClose={() => {
+          setModalOpen(null);
+          setNewTopicName({ ...newTopicName, [modalScope]: "" });
+          setNewSuiteTitle({ ...newSuiteTitle, [modalScope]: "" });
+        }}
+      />
     </main>
+  );
+}
+
+function AddItemModal(props: {
+  type: "topic" | "suite";
+  scope: BankScope;
+  open: boolean;
+  value: string;
+  onValue: (value: string) => void;
+  onAdd: () => void;
+  onClose: () => void;
+}) {
+  if (!props.open) return null;
+  
+  const placeholder = props.type === "topic" ? "New topic name" : "New suite title";
+  const title = props.type === "topic" ? "Add Topic" : "Add Suite";
+  
+  return (
+    <div className="modal-overlay" onClick={props.onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <h3>{title}</h3>
+        <input
+          placeholder={placeholder}
+          value={props.value}
+          onChange={(e) => props.onValue(e.target.value)}
+          onKeyPress={(e) => e.key === "Enter" && props.value.trim() && props.onAdd()}
+          autoFocus
+        />
+        <div className="modal-actions">
+          <button onClick={() => { if (props.value.trim()) props.onAdd(); }} disabled={!props.value.trim()}>Add</button>
+          <button className="secondary" onClick={props.onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -583,6 +650,7 @@ function BankPanel(props: {
   onSuiteTitle: (value: string) => void;
   onAddTopic: () => void;
   onAddSuite: () => void;
+  onOpenModal: (type: "topic" | "suite", scope: BankScope) => void;
   onDeleteTopic?: (id: string) => void;
   onDeleteSuite?: (id: string) => void;
 }) {
@@ -616,10 +684,8 @@ function BankPanel(props: {
             )) : <div className="bank-empty">No topics yet.</div>}
           </div>
           <div className="bank-add">
-            <input placeholder="New topic name" value={props.newTopicName} onChange={(event) => props.onTopicName(event.target.value)} />
-            <button onClick={props.onAddTopic} disabled={disabled}>Add Topic</button>
-            <input placeholder="New suite title" value={props.newSuiteTitle} onChange={(event) => props.onSuiteTitle(event.target.value)} />
-            <button onClick={props.onAddSuite} disabled={disabled}>Add Suite</button>
+            <button className="icon-button" onClick={() => props.onOpenModal("topic", props.scope)} title="Add topic">➕ Topic</button>
+            <button className="icon-button" onClick={() => props.onOpenModal("suite", props.scope)} title="Add suite">➕ Suite</button>
           </div>
         </>
       )}
@@ -699,6 +765,7 @@ function SuiteConfig(props: {
   onEditDescription: (id: string, value: string) => void;
   onEditDuration: (id: string, value: string) => void;
   onSaveEdit: () => void;
+  onDeleteSuite: (id: string) => void;
   onPractice: () => void;
 }) {
   return (
@@ -716,7 +783,10 @@ function SuiteConfig(props: {
         <section className="panel">
           <div className="panel-heading">
             <div><h3>Create / Edit Test Suite</h3><p>This page configures the suite. Code appears only inside coding questions during practice.</p></div>
-            <button className="secondary" onClick={props.onSaveEdit} disabled={props.isSavingEdit}>💾 Save</button>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button className="secondary" onClick={() => props.activeSuite && props.onDeleteSuite(props.activeSuite.id)} style={{ color: "#ef4444" }}>🗑️ Delete</button>
+              <button className="secondary" onClick={props.onSaveEdit} disabled={props.isSavingEdit}>💾 Save</button>
+            </div>
           </div>
           <div className="form-grid">
             <label>Suite Name

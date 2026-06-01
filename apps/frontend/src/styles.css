@@ -260,9 +260,26 @@ p {
 
 .bank-add {
   display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
   border-top: 1px solid #263449;
   padding-top: 10px;
+}
+
+.bank-add button {
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.bank-add button:hover {
+  background: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 
 .quick-add input,
@@ -276,8 +293,7 @@ p {
   color: white;
 }
 
-.quick-add button,
-.bank-add button {
+.quick-add button {
   border: 1px solid #3b82f6;
   border-radius: 8px;
   padding: 9px 10px;
@@ -968,6 +984,88 @@ p {
   color: #64748b;
   font-size: 12px;
   font-weight: 800;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 28px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: grid;
+  gap: 16px;
+}
+
+.modal-content h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.modal-content input {
+  padding: 10px 12px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #f8fafc;
+}
+
+.modal-content input:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.modal-actions button {
+  padding: 10px 16px;
+  border: 1.5px solid #2563eb;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.modal-actions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+}
+
+.modal-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-actions button.secondary {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
+.modal-actions button.secondary:hover:not(:disabled) {
+  background: #e2e8f0;
 }
 
 .prompt-template {
