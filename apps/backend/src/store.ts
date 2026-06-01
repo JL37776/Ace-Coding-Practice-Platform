@@ -55,39 +55,27 @@ export const store = {
   deleteTopic(id: string, user: User) {
     const topic = findTopic(topics, id);
     if (!topic) throw new Error("Topic not found");
-    if (!canReadScoped(topic, user)) throw new Error("Access denied");
-    
-    // Remove from parent
-    const index = topics.findIndex(t => t.id === id);
-    if (index >= 0) {
-      topics.splice(index, 1);
-    } else {
-      // Find in children
-      const visit = (nodes: TopicNode[]): boolean => {
-        for (let i = 0; i < nodes.length; i++) {
-          if (nodes[i].id === id) {
-            nodes.splice(i, 1);
-            return true;
-          }
-          if (nodes[i].children && visit(nodes[i].children!)) return true;
-        }
-        return false;
-      };
-      visit(topics);
-    }
+    if (!canWriteScoped(topic, user)) throw new Error("Access denied");
 
-    // Remove all suites under this topic
     const childTopicIds = new Set([id, ...collectChildTopicIds(id)]);
+    removeTopic(topics, id);
+    const deletedSuiteIds = new Set<string>();
     for (let i = suites.length - 1; i >= 0; i--) {
       if (childTopicIds.has(suites[i].topicId)) {
+        deletedSuiteIds.add(suites[i].id);
         suites.splice(i, 1);
+      }
+    }
+    for (let i = questions.length - 1; i >= 0; i--) {
+      if (deletedSuiteIds.has(questions[i].suiteId)) {
+        questions.splice(i, 1);
       }
     }
   },
   deleteSuite(id: string, user: User) {
     const suite = suites.find(s => s.id === id);
     if (!suite) throw new Error("Suite not found");
-    if (!canReadScoped(suite, user)) throw new Error("Access denied");
+    if (!canWriteScoped(suite, user)) throw new Error("Access denied");
     
     const index = suites.findIndex(s => s.id === id);
     if (index >= 0) suites.splice(index, 1);
@@ -102,7 +90,7 @@ export const store = {
   updateSuite(id: string, updates: Partial<TrainingSuite>, user: User) {
     const suite = suites.find(s => s.id === id);
     if (!suite) throw new Error("Suite not found");
-    if (!canReadScoped(suite, user)) throw new Error("Access denied");
+    if (!canWriteScoped(suite, user)) throw new Error("Access denied");
     
     if (updates.title !== undefined) suite.title = updates.title;
     if (updates.description !== undefined) suite.description = updates.description;
@@ -111,6 +99,36 @@ export const store = {
     if (updates.feedbackMode !== undefined) suite.feedbackMode = updates.feedbackMode;
     
     return suite;
+  },
+  replaceSuiteContents(id: string, replacement: TrainingSuite, replacementQuestions: Question[], user: User) {
+    const suite = suites.find(s => s.id === id);
+    if (!suite) throw new Error("Suite not found");
+    if (!canWriteScoped(suite, user)) throw new Error("Access denied");
+
+    suite.title = replacement.title;
+    suite.description = replacement.description;
+    suite.questionCount = replacementQuestions.length;
+    suite.durationMinutes = replacement.durationMinutes;
+    suite.scorePercent = 0;
+    suite.done = 0;
+    suite.total = replacementQuestions.length;
+    suite.allowedTypes = replacement.allowedTypes;
+    suite.feedbackMode = replacement.feedbackMode;
+
+    for (let i = questions.length - 1; i >= 0; i--) {
+      if (questions[i].suiteId === id) {
+        questions.splice(i, 1);
+      }
+    }
+
+    const normalizedQuestions = replacementQuestions.map((question) => ({
+      ...question,
+      suiteId: suite.id,
+      scope: suite.scope,
+      ownerUserId: suite.scope === "personal" ? suite.ownerUserId : undefined
+    }));
+    questions.push(...normalizedQuestions);
+    return { suite, questions: normalizedQuestions };
   },
   listSubmissions(user: User) {
     return Array.from(submissions.values())
@@ -145,6 +163,11 @@ function canReadScoped(item: { scope: BankScope; ownerUserId?: string }, user?: 
   return user.role === "admin" || item.ownerUserId === user.id;
 }
 
+function canWriteScoped(item: { scope: BankScope; ownerUserId?: string }, user: User) {
+  if (item.scope === "public") return user.role === "admin";
+  return user.role === "admin" || item.ownerUserId === user.id;
+}
+
 function filterTopicTree(nodes: TopicNode[], user: User): TopicNode[] {
   return nodes
     .filter((node) => canReadScoped(node, user))
@@ -152,20 +175,8 @@ function filterTopicTree(nodes: TopicNode[], user: User): TopicNode[] {
 }
 
 function collectChildTopicIds(topicId: string): string[] {
-  const result: string[] = [];
-  const visit = (nodes: typeof topics) => {
-    for (const node of nodes) {
-      if (node.parentId === topicId) result.push(node.id);
-      if (node.children) {
-        for (const child of node.children) {
-          if (child.parentId === topicId || node.id === topicId) result.push(child.id);
-        }
-        visit(node.children);
-      }
-    }
-  };
-  visit(topics);
-  return result;
+  const topic = findTopic(topics, topicId);
+  return topic ? flattenTopics(topic.children || []).map((node) => node.id) : [];
 }
 
 function findTopic(nodes: TopicNode[], id: string): TopicNode | undefined {
@@ -175,4 +186,17 @@ function findTopic(nodes: TopicNode[], id: string): TopicNode | undefined {
     if (child) return child;
   }
   return undefined;
+}
+
+function flattenTopics(nodes: TopicNode[]): TopicNode[] {
+  return nodes.flatMap((node) => [node, ...flattenTopics(node.children || [])]);
+}
+
+function removeTopic(nodes: TopicNode[], id: string): boolean {
+  const index = nodes.findIndex((node) => node.id === id);
+  if (index >= 0) {
+    nodes.splice(index, 1);
+    return true;
+  }
+  return nodes.some((node) => node.children && removeTopic(node.children, id));
 }

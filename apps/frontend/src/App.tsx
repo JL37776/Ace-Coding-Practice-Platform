@@ -18,7 +18,7 @@ const languages: Language[] = ["python", "typescript", "javascript", "csharp", "
 
 const defaultRaw = `@suite
 title=Imported Mixed Practice
-description=Paste a whole suite here. Then set time, validate, import, and practice.
+description=Paste a whole suite here. Then set time, validate, confirm overwrite, and practice.
 duration=15
 
 @q
@@ -146,10 +146,12 @@ export default function App() {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [modalOpen, setModalOpen] = useState<"topic" | "suite" | null>(null);
   const [modalScope, setModalScope] = useState<BankScope>("public");
+  const [questionResults, setQuestionResults] = useState<Record<string, "correct" | "incorrect">>({});
 
   const publicTopics = topics.filter((topic) => topic.scope === "public");
   const personalTopics = topics.filter((topic) => topic.scope === "personal");
   const activeSuite = suites.find((suite) => suite.id === activeSuiteId);
+  const canEditActiveSuite = Boolean(activeSuite && canManageScoped(activeSuite, user));
   const activeFeedbackMode = (activeSuiteId && suiteFeedbackMode[activeSuiteId]) || activeSuite?.feedbackMode || "instant";
   const activeQuestions = questions.filter((question) => question.suiteId === activeSuiteId);
   const currentQuestion = activeQuestions[questionIndex];
@@ -197,7 +199,7 @@ export default function App() {
     }
   }
 
-  async function refreshWorkspace() {
+  async function refreshWorkspace(selection?: { scope?: BankScope; topicId?: string; suiteId?: string }) {
     const [topicList, suiteList, questionList, problemList, submissionList] = await Promise.all([
       api.listTopics(),
       api.listSuites(),
@@ -205,14 +207,23 @@ export default function App() {
       api.listProblems(),
       api.listSubmissions()
     ]);
-    const activeTopicIds = collectTopicIds(topicList, activeTopicId);
-    const scopedSuites = suiteList.filter((suite) => suite.scope === scope && activeTopicIds.has(suite.topicId));
+    const selectedScope = selection?.scope || scope;
+    let selectedTopicId = selection?.topicId || activeTopicId;
+    const selectedSuiteId = selection?.suiteId !== undefined ? selection.suiteId : activeSuiteId;
+    let activeTopicIds = collectTopicIds(topicList, selectedTopicId);
+    if (!activeTopicIds.size) {
+      selectedTopicId = flattenTopics(topicList).find((topic) => topic.scope === selectedScope)?.id || "";
+      activeTopicIds = selectedTopicId ? collectTopicIds(topicList, selectedTopicId) : new Set();
+    }
+    const scopedSuites = suiteList.filter((suite) => suite.scope === selectedScope && activeTopicIds.has(suite.topicId));
     setTopics(topicList);
     setSuites(suiteList);
     setQuestions(questionList);
     setProblems(problemList);
     setSubmissions(submissionList);
-    if (!scopedSuites.some((suite) => suite.id === activeSuiteId)) setActiveSuiteId(scopedSuites[0]?.id || "");
+    if (selection?.scope) setScope(selection.scope);
+    if (selectedTopicId) setActiveTopicId(selectedTopicId);
+    setActiveSuiteId(scopedSuites.some((suite) => suite.id === selectedSuiteId) ? selectedSuiteId : scopedSuites[0]?.id || "");
     setQuestionIndex(0);
   }
 
@@ -234,10 +245,14 @@ export default function App() {
   async function addTopic(targetScope: BankScope) {
     const name = newTopicName[targetScope].trim();
     if (!name) return;
-    const topic = await api.createTopic({ scope: targetScope, name });
-    setNewTopicName({ ...newTopicName, [targetScope]: "" });
-    selectTopic(targetScope, topic.id);
-    await refreshWorkspace();
+    try {
+      const topic = await api.createTopic({ scope: targetScope, name });
+      setNewTopicName({ ...newTopicName, [targetScope]: "" });
+      selectTopic(targetScope, topic.id);
+      await refreshWorkspace({ scope: targetScope, topicId: topic.id, suiteId: "" });
+    } catch (error) {
+      alert("Failed to create topic: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
   }
 
   async function addSuite(targetScope: BankScope) {
@@ -245,28 +260,33 @@ export default function App() {
     if (!title) return;
     const targetTopicId = pickSuiteTopicId(topics, targetScope, scope === targetScope ? activeTopicId : undefined);
     if (!targetTopicId) return;
-    const suite = await api.createSuite({
-      scope: targetScope,
-      topicId: targetTopicId,
-      title,
-      description: "Created from the suite quick-add panel.",
-      questionCount: 0,
-      durationMinutes: 15,
-      allowedTypes: ["single", "multiple", "boolean", "blank", "coding"],
-      feedbackMode: "instant"
-    });
-    setNewSuiteTitle({ ...newSuiteTitle, [targetScope]: "" });
-    setScope(targetScope);
-    setActiveSuiteId(suite.id);
-    await refreshWorkspace();
+    try {
+      const suite = await api.createSuite({
+        scope: targetScope,
+        topicId: targetTopicId,
+        title,
+        description: "Created from the suite quick-add panel.",
+        questionCount: 0,
+        durationMinutes: 15,
+        allowedTypes: ["single", "multiple", "boolean", "blank", "coding"],
+        feedbackMode: "instant"
+      });
+      setNewSuiteTitle({ ...newSuiteTitle, [targetScope]: "" });
+      setScope(targetScope);
+      setActiveTopicId(suite.topicId);
+      setActiveSuiteId(suite.id);
+      setMode("config");
+      await refreshWorkspace({ scope: targetScope, topicId: suite.topicId, suiteId: suite.id });
+    } catch (error) {
+      alert("Failed to create suite: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
   }
 
   async function deleteTopic(topicId: string) {
     if (!confirm("Delete this topic and all its suites? This cannot be undone.")) return;
     try {
       await api.deleteTopic(topicId);
-      await refreshWorkspace();
-      setActiveSuiteId("");
+      await refreshWorkspace({ scope, topicId: activeTopicId, suiteId: activeSuiteId });
     } catch (error) {
       alert("Failed to delete topic: " + (error instanceof Error ? error.message : "Unknown error"));
     }
@@ -276,8 +296,7 @@ export default function App() {
     if (!confirm("Delete this suite and all its questions? This cannot be undone.")) return;
     try {
       await api.deleteSuite(suiteId);
-      await refreshWorkspace();
-      setActiveSuiteId("");
+      await refreshWorkspace({ scope, topicId: activeTopicId, suiteId: suiteId === activeSuiteId ? "" : activeSuiteId });
     } catch (error) {
       alert("Failed to delete suite: " + (error instanceof Error ? error.message : "Unknown error"));
     }
@@ -285,6 +304,10 @@ export default function App() {
 
   async function saveEditedSuite() {
     if (!activeSuite) return;
+    if (!canEditActiveSuite) {
+      alert("You do not have permission to edit this suite.");
+      return;
+    }
     if (isSavingEdit) return;
     
     setIsSavingEdit(true);
@@ -303,8 +326,11 @@ export default function App() {
         return;
       }
       
-      await api.updateSuite(activeSuite.id, { title, description, durationMinutes });
-      await refreshWorkspace();
+      await api.updateSuite(activeSuite.id, { title: title.trim(), description, durationMinutes, feedbackMode: activeFeedbackMode });
+      setEditingTitle(({ [activeSuite.id]: _removed, ...rest }) => rest);
+      setEditingDescription(({ [activeSuite.id]: _removed, ...rest }) => rest);
+      setEditingDuration(({ [activeSuite.id]: _removed, ...rest }) => rest);
+      await refreshWorkspace({ scope, topicId: activeTopicId, suiteId: activeSuite.id });
       setEditorMessage("Suite updated successfully!");
       setTimeout(() => setEditorMessage(""), 3000);
     } catch (error) {
@@ -316,19 +342,34 @@ export default function App() {
 
   async function parseRaw() {
     if (!activeTopicId) return;
-    const parsed = await api.parseTopicRaw({ scope, topicId: activeTopicId, raw: rawText });
-    setRawPreview(JSON.stringify(parsed, null, 2));
-    setRawParsedQuestions(parsed.questions);
-    setEditorMessage(`Parsed ${parsed.questions.length} questions for ${parsed.suite.title}.`);
+    try {
+      const parsed = await api.parseTopicRaw({ scope, topicId: activeTopicId, raw: rawText });
+      setRawPreview(JSON.stringify(parsed, null, 2));
+      setRawParsedQuestions(parsed.questions);
+      setEditorMessage(`Format valid. Parsed ${parsed.questions.length} questions for ${parsed.suite.title}.`);
+    } catch (error) {
+      alert("Raw format is invalid: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
   }
 
-  async function importRaw() {
-    if (!activeTopicId) return;
-    const imported = await api.importTopicRaw({ scope, topicId: activeTopicId, raw: rawText });
-    setActiveSuiteId(imported.suite.id);
-    setRawParsedQuestions(imported.questions);
-    setEditorMessage(`Imported ${imported.questions.length} questions into ${imported.suite.title}.`);
-    await refreshWorkspace();
+  async function validateAndImportRaw() {
+    if (!activeTopicId || !activeSuite) return;
+    try {
+      const parsed = await api.parseTopicRaw({ scope, topicId: activeTopicId, raw: rawText });
+      setRawPreview(JSON.stringify(parsed, null, 2));
+      setRawParsedQuestions(parsed.questions);
+      if (!confirm("Format valid. Import and overwrite this suite?")) {
+        setEditorMessage(`Format valid. Parsed ${parsed.questions.length} questions for ${parsed.suite.title}.`);
+        return;
+      }
+      const imported = await api.importTopicRaw({ scope, topicId: activeTopicId, suiteId: activeSuite.id, raw: rawText });
+      setActiveSuiteId(imported.suite.id);
+      setRawParsedQuestions(imported.questions);
+      setEditorMessage(`Imported ${imported.questions.length} questions and overwrote ${imported.suite.title}.`);
+      await refreshWorkspace({ scope, topicId: imported.suite.topicId, suiteId: imported.suite.id });
+    } catch (error) {
+      alert("Failed to validate/import raw suite: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
   }
 
   async function submitCode() {
@@ -352,6 +393,7 @@ export default function App() {
     }
     const expected = currentQuestion.answer;
     const ok = JSON.stringify(value) === JSON.stringify(expected);
+    setQuestionResults({ ...questionResults, [currentQuestion.id]: ok ? "correct" : "incorrect" });
     setFeedback(ok ? "Correct." : `Submitted. Expected answer: ${JSON.stringify(expected)}`);
   }
 
@@ -361,6 +403,19 @@ export default function App() {
   }
 
   function submitFinalPractice() {
+    // Calculate results for all questions
+    const results: Record<string, "correct" | "incorrect"> = { ...questionResults };
+    for (const question of activeQuestions) {
+      if (!results[question.id]) {
+        const value = answers[question.id];
+        if (value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0)) {
+          const expected = question.answer;
+          const ok = JSON.stringify(value) === JSON.stringify(expected);
+          results[question.id] = ok ? "correct" : "incorrect";
+        }
+      }
+    }
+    setQuestionResults(results);
     setFinalSubmitted(true);
     setFeedback("Submitted. Answers and explanations are now visible.");
   }
@@ -524,6 +579,7 @@ export default function App() {
           <SuiteConfig
             scope={scope}
             activeSuite={activeSuite}
+            canEditSuite={canEditActiveSuite}
             activeQuestions={activeQuestions}
             rawParsedQuestions={rawParsedQuestions}
             activeTopicId={activeTopicId}
@@ -533,9 +589,9 @@ export default function App() {
             editorMessage={editorMessage}
             onRawText={setRawText}
             onParseRaw={() => void parseRaw()}
-            onImportRaw={() => void importRaw()}
+            onValidateRaw={() => void validateAndImportRaw()}
             aiPromptTemplate={aiPromptTemplate}
-            onFeedbackMode={(value) => activeSuiteId && setSuiteFeedbackMode({ ...suiteFeedbackMode, [activeSuiteId]: value })}
+            onFeedbackMode={(value) => activeSuiteId && canEditActiveSuite && setSuiteFeedbackMode({ ...suiteFeedbackMode, [activeSuiteId]: value })}
             editingTitle={editingTitle}
             editingDescription={editingDescription}
             editingDuration={editingDuration}
@@ -684,8 +740,8 @@ function BankPanel(props: {
             )) : <div className="bank-empty">No topics yet.</div>}
           </div>
           <div className="bank-add">
-            <button className="icon-button" onClick={() => props.onOpenModal("topic", props.scope)} title="Add topic">➕ Topic</button>
-            <button className="icon-button" onClick={() => props.onOpenModal("suite", props.scope)} title="Add suite">➕ Suite</button>
+            <button className="icon-button" onClick={() => props.onOpenModal("topic", props.scope)} title="Add topic" disabled={disabled}>+ Topic</button>
+            <button className="icon-button" onClick={() => props.onOpenModal("suite", props.scope)} title="Add suite" disabled={disabled}>+ Suite</button>
           </div>
         </>
       )}
@@ -721,7 +777,7 @@ function TopicNodeView(props: {
           <strong>{props.topic.name}</strong>
           <span>{props.topic.scorePercent}% ({props.topic.done}/{props.topic.total})</span>
         </button>
-        {props.onDeleteTopic && <button className="icon-button topic-delete" onClick={() => props.onDeleteTopic?.(props.topic.id)} title="Delete topic" aria-label="Delete topic">×</button>}
+        {props.onDeleteTopic && <button className="icon-button topic-delete" onClick={() => props.onDeleteTopic?.(props.topic.id)} title="Delete topic" aria-label="Delete topic">x</button>}
       </div>
       {open && (
         <div className="child-topic">
@@ -732,7 +788,7 @@ function TopicNodeView(props: {
                 <span>{suite.scorePercent}% ({suite.done}/{suite.total})</span>
                 <small>{suite.questionCount} questions | {suite.allowedTypes.join(", ")}</small>
               </button>
-              {props.onDeleteSuite && <button className="icon-button suite-delete" onClick={() => props.onDeleteSuite?.(suite.id)} title="Delete suite" aria-label="Delete suite">×</button>}
+              {props.onDeleteSuite && <button className="icon-button suite-delete" onClick={() => props.onDeleteSuite?.(suite.id)} title="Delete suite" aria-label="Delete suite">x</button>}
             </div>
           ))}
           {!topicSuites.length && <button className="suite-tree-item add-suite-row" onClick={() => props.onSelectTopic(props.scope, props.topic.id)}>+ Add suite</button>}
@@ -745,6 +801,7 @@ function TopicNodeView(props: {
 function SuiteConfig(props: {
   scope: BankScope;
   activeSuite?: TrainingSuite;
+  canEditSuite: boolean;
   activeQuestions: Question[];
   rawParsedQuestions: Question[];
   activeTopicId: string;
@@ -759,7 +816,7 @@ function SuiteConfig(props: {
   isSavingEdit: boolean;
   onRawText: (value: string) => void;
   onParseRaw: () => void;
-  onImportRaw: () => void;
+  onValidateRaw: () => void;
   onFeedbackMode: (mode: PracticeFeedbackMode) => void;
   onEditTitle: (id: string, value: string) => void;
   onEditDescription: (id: string, value: string) => void;
@@ -776,7 +833,7 @@ function SuiteConfig(props: {
           <h2>{props.activeSuite?.title || "Choose or create a suite"}</h2>
           <p>{props.activeSuite?.description || "Paste a whole raw suite, set time, add similar questions, then practice."}</p>
         </div>
-        <button className="practice-button" onClick={props.onPractice} disabled={!props.activeQuestions.length}>🚀 Practice</button>
+        <button className="practice-button" onClick={props.onPractice} disabled={!props.activeQuestions.length}>Practice</button>
       </header>
 
       <section className="editor-grid">
@@ -784,8 +841,8 @@ function SuiteConfig(props: {
           <div className="panel-heading">
             <div><h3>Create / Edit Test Suite</h3><p>This page configures the suite. Code appears only inside coding questions during practice.</p></div>
             <div style={{ display: "flex", gap: "8px" }}>
-              <button className="secondary" onClick={() => props.activeSuite && props.onDeleteSuite(props.activeSuite.id)} style={{ color: "#ef4444" }}>🗑️ Delete</button>
-              <button className="secondary" onClick={props.onSaveEdit} disabled={props.isSavingEdit}>💾 Save</button>
+              <button className="secondary" onClick={() => props.activeSuite && props.onDeleteSuite(props.activeSuite.id)} disabled={!props.canEditSuite || !props.activeSuite} style={{ color: "#ef4444" }}>Delete</button>
+              <button className="secondary" onClick={props.onSaveEdit} disabled={!props.canEditSuite || props.isSavingEdit}>Save</button>
             </div>
           </div>
           <div className="form-grid">
@@ -793,6 +850,7 @@ function SuiteConfig(props: {
               <input 
                 value={props.editingTitle[props.activeSuite?.id || ""] !== undefined ? props.editingTitle[props.activeSuite?.id || ""] : props.activeSuite?.title || ""} 
                 onChange={(e) => props.activeSuite && props.onEditTitle(props.activeSuite.id, e.target.value)}
+                readOnly={!props.canEditSuite}
               />
             </label>
             <label>Parent Topic<input value={props.activeTopicId} readOnly /></label>
@@ -803,20 +861,22 @@ function SuiteConfig(props: {
                 max="240"
                 value={props.editingDuration[props.activeSuite?.id || ""] !== undefined ? props.editingDuration[props.activeSuite?.id || ""] : props.activeSuite?.durationMinutes || 15} 
                 onChange={(e) => props.activeSuite && props.onEditDuration(props.activeSuite.id, e.target.value)}
+                readOnly={!props.canEditSuite}
               />
             </label>
             <label>Description
               <textarea
                 value={props.editingDescription[props.activeSuite?.id || ""] !== undefined ? props.editingDescription[props.activeSuite?.id || ""] : props.activeSuite?.description || ""}
                 onChange={(e) => props.activeSuite && props.onEditDescription(props.activeSuite.id, e.target.value)}
+                readOnly={!props.canEditSuite}
                 style={{ minHeight: "60px" }}
               />
             </label>
             <label>Question Count<input value={`${props.activeSuite?.questionCount || props.activeQuestions.length} questions`} readOnly /></label>
           </div>
           <div className="mode-switch">
-            <button className={props.feedbackMode === "instant" ? "active" : ""} onClick={() => props.onFeedbackMode("instant")}>⚡ Instant Feedback</button>
-            <button className={props.feedbackMode === "final" ? "active" : ""} onClick={() => props.onFeedbackMode("final")}>🔒 Show at End</button>
+            <button className={props.feedbackMode === "instant" ? "active" : ""} onClick={() => props.onFeedbackMode("instant")} disabled={!props.canEditSuite}>Instant Feedback</button>
+            <button className={props.feedbackMode === "final" ? "active" : ""} onClick={() => props.onFeedbackMode("final")} disabled={!props.canEditSuite}>Show at End</button>
           </div>
           <div className="type-row">{(props.activeSuite?.allowedTypes || ["single", "multiple", "boolean", "blank", "coding"]).map((type) => <span key={type}>{type}</span>)}</div>
           {props.rawParsedQuestions.length > 0 && <RawQuestionSummary questions={props.rawParsedQuestions} />}
@@ -824,13 +884,13 @@ function SuiteConfig(props: {
         </section>
 
         <section className="panel raw-panel">
-          <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI/generated raw content for one full suite. Parse, validate, import.</p></div><button className="secondary" disabled>✨ AI Similar</button></div>
+          <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI/generated raw content for one full suite. Validate can overwrite the current suite after confirmation.</p></div><button className="secondary" disabled>AI Similar</button></div>
           <label className="prompt-template-label">
             AI Prompt Template
             <textarea className="prompt-template" value={props.aiPromptTemplate} readOnly />
           </label>
-          <textarea className="raw-editor" value={props.rawText} onChange={(event) => props.onRawText(event.target.value)} />
-          <div className="actions"><button onClick={props.onParseRaw}>Parse</button><button className="secondary" onClick={props.onParseRaw}>Validate</button><button onClick={props.onImportRaw}>Import</button></div>
+          <textarea className="raw-editor" value={props.rawText} onChange={(event) => props.onRawText(event.target.value)} readOnly={!props.canEditSuite} />
+          <div className="actions"><button onClick={props.onParseRaw}>Parse</button><button className="secondary" onClick={props.onValidateRaw} disabled={!props.canEditSuite}>Validate</button></div>
           {props.editorMessage && <div className="notice">{props.editorMessage}</div>}
           {props.rawPreview && <pre className="raw-preview">{props.rawPreview}</pre>}
           <div className="ai-box"><strong>AI Add Similar Questions</strong><span>Target: {props.scope} bank</span><span>Generate similar questions after schema validation. Provider wiring comes next.</span></div>
@@ -875,14 +935,14 @@ function PracticePanel(props: {
     <main className="practice-fullscreen">
       <header className="practice-topbar">
         <div>
-          <p className="eyebrow">📝 Practice</p>
+          <p className="eyebrow">Practice</p>
           <h2>{props.suite?.title || "Practice Suite"}</h2>
         </div>
         <div className="practice-status">
-          <div className="timer-card"><span>Mode</span><strong>{props.feedbackMode === "instant" ? "⚡ Instant" : "🔒 Final"}</strong></div>
+          <div className="timer-card"><span>Mode</span><strong>{props.feedbackMode === "instant" ? "Instant" : "Final"}</strong></div>
           <div className="timer-card" style={{background: props.remainingSeconds < 300 ? "linear-gradient(135deg, #fee2e2, #fecaca)" : undefined, borderColor: props.remainingSeconds < 300 ? "#fca5a5" : undefined}}><span>Time Left</span><strong style={{color: props.remainingSeconds < 300 ? "#991b1b" : "#0f172a"}}>{formatSeconds(props.remainingSeconds)}</strong></div>
           <div className="timer-card"><span>Progress</span><strong>{progress}%</strong></div>
-          <button className="secondary" onClick={props.onBack}>↩ Exit</button>
+          <button className="secondary" onClick={props.onBack}>Exit</button>
         </div>
       </header>
       <div className="practice-progress"><span style={{ width: `${progress}%` }} /></div>
@@ -976,7 +1036,8 @@ function OptionList({ question, value, onAnswer }: { question: Question; value?:
 function MultiOptionList({ question, value, onAnswer }: { question: Question; value: string[]; onAnswer: (id: string, value: unknown) => void }) {
   return <div className="choice-list">{question.options?.map((option) => {
     const selected = value.includes(option.id);
-    return <button key={option.id} className={selected ? "selected" : ""} onClick={() => onAnswer(question.id, selected ? value.filter((id) => id !== option.id) : [...value, option.id])}><span style={{display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "32px", height: "32px", borderRadius: "8px", background: selected ? "#2563eb" : "#e0e7ff", color: selected ? "white" : "#2563eb", fontWeight: "900", fontSize: "14px"}}>{selected ? "✓" : ""}</span><span>{option.text}</span></button>;
+    const nextValue = selected ? value.filter((id) => id !== option.id) : [...value, option.id];
+    return <button key={option.id} className={selected ? "selected" : ""} onClick={() => onAnswer(question.id, nextValue)}><span style={{display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "32px", height: "32px", borderRadius: "8px", background: selected ? "#2563eb" : "#e0e7ff", color: selected ? "white" : "#2563eb", fontWeight: "900", fontSize: "14px"}}>{selected ? "\u2713" : ""}</span><span>{option.text}</span></button>;
   })}</div>;
 }
 
@@ -1031,6 +1092,12 @@ function pickSuiteTopicId(nodes: TopicNode[], targetScope: BankScope, preferredI
   }
   const root = flat.find((topic) => !topic.parentId);
   return root?.children?.[0]?.id || root?.id || flat[0]?.id;
+}
+
+function canManageScoped(item: { scope: BankScope; ownerUserId?: string }, user: User | null) {
+  if (!user) return false;
+  if (item.scope === "public") return user.role === "admin";
+  return user.role === "admin" || item.ownerUserId === user.id;
 }
 
 function formatSubmission(submission: Submission) {

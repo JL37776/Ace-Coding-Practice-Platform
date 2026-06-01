@@ -67,6 +67,7 @@ const createQuestionSchema = z.object({
 const topicRawSchema = z.object({
   scope: z.enum(["public", "personal"]).default("personal"),
   topicId: z.string().min(1),
+  suiteId: z.string().min(1).optional(),
   raw: z.string().min(1).max(50000)
 });
 
@@ -269,6 +270,10 @@ export function createApiRouter() {
         return res.status(403).json({ error: "Only admins can import public question banks" });
       }
       const parsed = parseTopicRaw(payload.raw, payload.scope, payload.topicId, req.user!);
+      if (payload.suiteId) {
+        const overwritten = store.replaceSuiteContents(payload.suiteId, parsed.suite, parsed.questions, req.user!);
+        return res.json({ data: overwritten });
+      }
       const suite = store.createSuite(parsed.suite);
       const importedQuestions = parsed.questions.map((question) => store.createQuestion({ ...question, suiteId: suite.id }));
       res.status(201).json({ data: { suite, questions: importedQuestions } });
@@ -436,6 +441,10 @@ function parseTopicRaw(raw: string, scope: BankScope, topicId: string, user: Use
   const suiteFields = parseFields(suiteBlock || "");
   const questions = questionBlocks.map((block) => questionFromFields(parseFields(block), scope, user));
   const allowedTypes = Array.from(new Set(questions.map((question) => question.type))) as QuestionType[];
+  const durationMinutes = Number(suiteFields.duration || 15);
+  if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 240) {
+    throw new Error("Suite duration must be an integer from 1 to 240 minutes");
+  }
   const suite: TrainingSuite = {
     id: randomUUID(),
     scope,
@@ -444,7 +453,7 @@ function parseTopicRaw(raw: string, scope: BankScope, topicId: string, user: Use
     title: suiteFields.title || "Imported Topic Raw Suite",
     description: suiteFields.description || "Imported from Paste Topic Raw.",
     questionCount: questions.length,
-    durationMinutes: Number(suiteFields.duration || 15),
+    durationMinutes,
     scorePercent: 0,
     done: 0,
     total: questions.length,

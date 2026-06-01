@@ -34,7 +34,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
   if (!response.ok) throw new Error(await response.text());
-  const payload = (await response.json()) as ApiEnvelope<T>;
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  if (!text) return undefined as T;
+  const payload = JSON.parse(text) as ApiEnvelope<T>;
   return payload.data;
 }
 
@@ -81,7 +84,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input)
     }),
-  importTopicRaw: (input: { scope: "public" | "personal"; topicId: string; raw: string }) =>
+  importTopicRaw: (input: { scope: "public" | "personal"; topicId: string; suiteId?: string; raw: string }) =>
     request<{ suite: TrainingSuite; questions: Question[] }>("/api/topic-raw/import", {
       method: "POST",
       body: JSON.stringify(input)
