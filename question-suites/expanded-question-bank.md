@@ -6,6 +6,97 @@ Copy one `@suite` block at a time into Paste Topic Raw. The C# Part 1 suite is t
 
 ```text
 @suite
+title=C# Part 1 - Core Language Fundamentals
+description=Train value types, reference types, var, null, strings, collections, increment operators and boxing.
+duration=45
+
+@q
+type=single
+title=Which of the following is a value type in C#?
+A=string
+B=List<int>
+C=int
+D=object
+answer=C
+explanation=int is a value type.
+tags=csharp,valuetype
+
+@q
+type=single
+title=Which of the following is a reference type?
+A=bool
+B=double
+C=string
+D=enum
+answer=C
+explanation=string is a reference type.
+tags=csharp,referencetype
+
+@q
+type=boolean
+title=var makes C# dynamically typed.
+answer=false
+explanation=var is compile-time type inference.
+tags=csharp,var
+
+@q
+type=single
+title=What exception is commonly thrown when accessing a member on null?
+A=ArgumentException
+B=NullReferenceException
+C=InvalidCastException
+D=IndexOutOfRangeException
+answer=B
+explanation=Dereferencing null causes NullReferenceException.
+tags=csharp,null
+
+@q
+type=single
+title=Which property returns the number of items in a List<T>?
+A=Length
+B=Size
+C=Count
+D=Capacity
+answer=C
+explanation=Count returns the number of elements.
+tags=csharp,list
+
+@q
+type=single
+title=Which method checks whether a dictionary contains a key?
+A=Contains
+B=ContainsKey
+C=HasKey
+D=FindKey
+answer=B
+explanation=ContainsKey checks key existence.
+tags=csharp,dictionary
+
+@q
+type=single
+title=What is printed? int x = 5; Console.WriteLine(x++);
+A=4
+B=5
+C=6
+D=Compile Error
+answer=B
+explanation=Post-increment returns the old value.
+tags=csharp,increment
+
+@q
+type=single
+title=What operation occurs here? object obj = 5;
+A=Casting
+B=Inheritance
+C=Boxing
+D=Overloading
+answer=C
+explanation=A value type is wrapped as an object.
+tags=csharp,boxing
+```
+
+```text
+@suite
 title=C# Part 2 - Control Flow, Methods and Scope
 description=Train if/else, switch, loops, method parameters, return values, overloads and variable scope.
 duration=45

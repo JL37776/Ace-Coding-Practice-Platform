@@ -1,4 +1,7 @@
-import type { Problem, Question, SystemSettings, TestCase, TopicNode, TrainingSuite, User } from "@ace/shared";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import type { BankScope, Problem, Question, QuestionType, SystemSettings, TestCase, TopicNode, TrainingSuite, User } from "@ace/shared";
 
 export const systemSettings: SystemSettings = {
   allowedQuestionTypes: ["single", "multiple", "boolean", "blank", "coding"],
@@ -303,3 +306,116 @@ export const testCases: TestCase[] = [
     order: 2
   }
 ];
+
+loadExpandedQuestionBank();
+
+function loadExpandedQuestionBank() {
+  const rootDir = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
+  const bankPath = join(rootDir, "question-suites", "expanded-question-bank.md");
+  if (!existsSync(bankPath)) return;
+
+  const markdown = readFileSync(bankPath, "utf8");
+  const rawSuites = [...markdown.matchAll(/```text\s*([\s\S]*?)```/g)]
+    .map((match) => match[1].trim())
+    .filter((block) => block.startsWith("@suite"));
+
+  const topicByPrefix: Record<string, string> = {
+    "C#": "topic-csharp",
+    ".NET": "topic-dotnet",
+    React: "topic-react",
+    Java: "topic-java"
+  };
+
+  ensureInterviewChildTopic("topic-csharp", "C# Interview Practice");
+  ensureInterviewChildTopic("topic-dotnet", ".NET Interview Practice");
+  ensureInterviewChildTopic("topic-react", "React Interview Practice");
+  ensureInterviewChildTopic("topic-java", "Java Interview Practice");
+
+  for (const raw of rawSuites) {
+    const parsed = parseSeedRawSuite(raw);
+    const topicId = Object.entries(topicByPrefix).find(([prefix]) => parsed.suite.title.startsWith(prefix))?.[1] || "topic-interview";
+    const suiteId = slugId("suite", parsed.suite.title);
+    if (suites.some((suite) => suite.id === suiteId)) continue;
+    suites.push({ ...parsed.suite, id: suiteId, topicId });
+    questions.push(...parsed.questions.map((question, index) => ({ ...question, id: `${suiteId}-q${index + 1}`, suiteId })));
+  }
+}
+
+function ensureInterviewChildTopic(id: string, name: string) {
+  const interview = topics.find((topic) => topic.id === "topic-interview");
+  if (!interview) return;
+  if (interview.children?.some((topic) => topic.id === id)) return;
+  interview.children = [...(interview.children || []), { id, scope: "public", parentId: interview.id, name, scorePercent: 0, done: 0, total: 0 }];
+}
+
+function parseSeedRawSuite(raw: string) {
+  const blocks = raw.split(/\n(?=@(?:suite|q)\b)/i).map((block) => block.trim()).filter(Boolean);
+  const suiteFields = parseSeedFields(blocks.find((block) => block.toLowerCase().startsWith("@suite")) || "");
+  const parsedQuestions = blocks
+    .filter((block) => block.toLowerCase().startsWith("@q"))
+    .map((block) => seedQuestionFromFields(parseSeedFields(block)));
+  const allowedTypes = Array.from(new Set(parsedQuestions.map((question) => question.type))) as QuestionType[];
+  const suite: TrainingSuite = {
+    id: "",
+    scope: "public",
+    topicId: "",
+    title: suiteFields.title || "Imported Suite",
+    description: suiteFields.description || "",
+    questionCount: parsedQuestions.length,
+    durationMinutes: Number(suiteFields.duration || 15),
+    scorePercent: 0,
+    done: 0,
+    total: parsedQuestions.length,
+    allowedTypes: allowedTypes.length ? allowedTypes : ["single"],
+    feedbackMode: suiteFields.feedbackMode === "final" ? "final" : "instant"
+  };
+  return { suite, questions: parsedQuestions };
+}
+
+function parseSeedFields(block: string) {
+  const fields: Record<string, string> = {};
+  for (const line of block.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("@")) continue;
+    const index = trimmed.indexOf("=");
+    if (index !== -1) fields[trimmed.slice(0, index).trim()] = trimmed.slice(index + 1).trim();
+  }
+  return fields;
+}
+
+function seedQuestionFromFields(fields: Record<string, string>): Question {
+  const type = normalizeSeedQuestionType(fields.type);
+  const options = ["A", "B", "C", "D", "E", "F"].filter((id) => fields[id]).map((id) => ({ id, text: fields[id] }));
+  return {
+    id: "",
+    scope: "public",
+    suiteId: "",
+    type,
+    title: fields.title || "Untitled question",
+    description: fields.description || "",
+    difficulty: fields.difficulty === "medium" || fields.difficulty === "hard" ? fields.difficulty : "easy",
+    tags: fields.tags ? fields.tags.split(",").map((tag) => tag.trim()).filter(Boolean) : [],
+    media: [],
+    options: options.length ? options : undefined,
+    answer: parseSeedAnswer(fields.answer || fields.ans, type),
+    explanation: fields.explanation || "",
+    problemId: fields.problemId,
+    metadata: {}
+  };
+}
+
+function normalizeSeedQuestionType(value = "single"): QuestionType {
+  if (value === "multiple" || value === "boolean" || value === "blank" || value === "coding") return value;
+  return "single";
+}
+
+function parseSeedAnswer(value: string | undefined, type: QuestionType) {
+  if (!value) return undefined;
+  if (type === "multiple") return value.split(",").map((item) => item.trim()).filter(Boolean);
+  if (type === "boolean") return value.toLowerCase() === "true";
+  return value;
+}
+
+function slugId(prefix: string, value: string) {
+  return `${prefix}-${value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
