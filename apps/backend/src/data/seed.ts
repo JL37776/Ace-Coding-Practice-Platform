@@ -12,6 +12,10 @@ export const problems: Problem[] = [
       "Return indices of the two numbers such that they add up to target. You may assume exactly one solution.",
     configJson: {
       functionName: "twoSum",
+      entrypoint: {
+        python: "two_sum",
+        javascript: "twoSum"
+      },
       signature: {
         python: "def two_sum(nums, target):",
         javascript: "function twoSum(nums, target) {}"

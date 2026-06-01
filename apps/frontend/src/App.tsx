@@ -29,6 +29,14 @@ export default function App() {
     setSourceCode(starterCode[language]);
   }, [language]);
 
+  useEffect(() => {
+    if (!submissions.some((submission) => submission.status === "queued" || submission.status === "running")) {
+      return;
+    }
+    const timer = window.setInterval(() => void refresh(), 1000);
+    return () => window.clearInterval(timer);
+  }, [submissions]);
+
   async function refresh() {
     const [problemList, submissionList] = await Promise.all([api.listProblems(), api.listSubmissions()]);
     setProblems(problemList);
@@ -66,7 +74,7 @@ export default function App() {
             onClick={() => setSelectedId(problem.id)}
           >
             <strong>{problem.title}</strong>
-            <span>{problem.difficulty} · {problem.tags.join(", ")}</span>
+            <span>{problem.difficulty} | {problem.tags.join(", ")}</span>
           </button>
         ))}
       </aside>
@@ -106,9 +114,21 @@ export default function App() {
               <article key={submission.id} className="submission">
                 <div>
                   <strong>{submission.status}</strong>
-                  <span>{submission.language} · {new Date(submission.createdAt).toLocaleString()}</span>
+                  <span>{submission.language} | {new Date(submission.createdAt).toLocaleString()}</span>
                 </div>
-                <pre>{submission.result?.stdout || submission.result?.stderr || "Waiting for judge..."}</pre>
+                <pre>
+                  {submission.result
+                    ? [
+                        submission.result.stdout,
+                        submission.result.stderr,
+                        ...submission.result.testcaseResults.map(
+                          (item) => `${item.testcaseId}: ${item.status}${item.stderr ? ` - ${item.stderr}` : ""}`
+                        )
+                      ]
+                        .filter(Boolean)
+                        .join("\n") || "Judge finished."
+                    : "Waiting for judge..."}
+                </pre>
               </article>
             ))
           )}

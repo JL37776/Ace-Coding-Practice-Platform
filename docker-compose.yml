@@ -1,0 +1,48 @@
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./infra/deploy/azure-vm/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      PORT: "3000"
+      FRONTEND_ORIGIN: "*"
+      JUDGE_PROVIDER: docker
+      DOCKER_JUDGE_IMAGE_PYTHON: ace-judge-python:3.12
+      DOCKER_JUDGE_IMAGE_JAVASCRIPT: ace-judge-javascript:22
+      DOCKER_JUDGE_CPUS: "0.5"
+      DOCKER_JUDGE_MEMORY: 256m
+      DOCKER_JUDGE_TIMEOUT_MS: "10000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  judge-python:
+    image: ace-judge-python:3.12
+    build:
+      context: ./infra/runners/python
+    profiles:
+      - runner-images
+
+  judge-javascript:
+    image: ace-judge-javascript:22
+    build:
+      context: ./infra/runners/javascript
+    profiles:
+      - runner-images

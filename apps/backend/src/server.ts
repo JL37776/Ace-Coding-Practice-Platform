@@ -6,7 +6,7 @@ import { createApiRouter } from "./routes.js";
 
 const app = express();
 
-app.use(cors({ origin: config.frontendOrigin, credentials: true }));
+app.use(cors({ origin: config.frontendOrigin === "*" ? true : config.frontendOrigin, credentials: true }));
 app.use(express.json({ limit: "256kb" }));
 app.use("/api", createApiRouter());
 

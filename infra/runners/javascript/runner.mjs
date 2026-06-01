@@ -1,69 +1,109 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import vm from "node:vm";
 
-const backendUrl = (process.env.BACKEND_URL || "").replace(/\/$/, "");
-const submissionId = process.env.SUBMISSION_ID || "";
-
-if (!backendUrl || !submissionId) {
-  throw new Error("BACKEND_URL and SUBMISSION_ID are required");
-}
-
-const submissionPayload = await fetchJson(`${backendUrl}/api/submissions/${submissionId}`);
-const submission = submissionPayload.data;
-const workdir = join(tmpdir(), `ace-${submissionId}`);
+const payloadPath = process.env.JUDGE_PAYLOAD_PATH || "/workspace/payload.json";
 const started = Date.now();
 
-await mkdir(workdir, { recursive: true });
 try {
-  const sourcePath = join(workdir, "main.js");
-  await writeFile(sourcePath, submission.sourceCode, "utf8");
-  const result = await runNode(sourcePath, workdir);
-  await postJson(`${backendUrl}/api/internal/judge-results/${submissionId}`, {
-    status: result.code === 0 ? "accepted" : "runtime_error",
-    stdout: result.stdout.slice(0, 8000),
-    stderr: result.stderr.slice(0, 8000),
+  const payload = JSON.parse(await readPayload());
+  const result = await judge(payload);
+  process.stdout.write(JSON.stringify(result));
+} catch (error) {
+  process.stdout.write(
+    JSON.stringify({
+      status: "system_error",
+      stdout: "",
+      stderr: error instanceof Error ? error.stack || error.message : "Judge failed",
+      durationMs: Date.now() - started,
+      testcaseResults: []
+    })
+  );
+}
+
+async function readPayload() {
+  if (existsSync(payloadPath)) {
+    return readFile(payloadPath, "utf8");
+  }
+
+  const chunks = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function judge(payload) {
+  const { submission, problem, testCases } = payload;
+  const config = problem.configJson || {};
+  const entrypoint = config.entrypoint?.javascript || config.functionName || "solution";
+  const context = vm.createContext({ console });
+
+  try {
+    vm.runInContext(submission.sourceCode, context, { filename: "submission.js", timeout: 1000 });
+  } catch (error) {
+    return {
+      status: "compile_error",
+      stdout: "",
+      stderr: error instanceof Error ? error.stack || error.message : "Compile failed",
+      durationMs: Date.now() - started,
+      testcaseResults: []
+    };
+  }
+
+  if (typeof context[entrypoint] !== "function") {
+    return {
+      status: "runtime_error",
+      stdout: "",
+      stderr: `Expected a callable function named ${entrypoint}`,
+      durationMs: Date.now() - started,
+      testcaseResults: []
+    };
+  }
+
+  let status = "accepted";
+  const testcaseResults = [];
+  for (const testCase of testCases) {
+    const caseStarted = Date.now();
+    const caseResult = runCase(context, entrypoint, testCase, config);
+    if (caseResult.status !== "accepted" && status === "accepted") {
+      status = caseResult.status;
+    }
+    testcaseResults.push({
+      testcaseId: testCase.id,
+      ...caseResult,
+      durationMs: Date.now() - caseStarted
+    });
+  }
+
+  return {
+    status,
+    stdout: "",
+    stderr: "",
     durationMs: Date.now() - started,
-    testcaseResults: []
-  });
-} finally {
-  await rm(workdir, { recursive: true, force: true });
+    testcaseResults
+  };
 }
 
-async function runNode(sourcePath, cwd) {
-  return new Promise((resolve) => {
-    const child = spawn("node", ["--max-old-space-size=128", sourcePath], {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"]
+function runCase(context, entrypoint, testCase, config) {
+  try {
+    context.__aceArgs = Object.values(testCase.inputJson);
+    const actual = vm.runInContext(`${entrypoint}(...__aceArgs)`, context, {
+      timeout: Number(config.timeLimitMs || 5000)
     });
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), 5000);
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({ code, stdout, stderr });
-    });
-  });
-}
+    delete context.__aceArgs;
 
-async function fetchJson(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(await response.text());
-  return response.json();
-}
-
-async function postJson(url, payload) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (!response.ok) throw new Error(await response.text());
+    if (JSON.stringify(actual) !== JSON.stringify(testCase.expectedJson)) {
+      return {
+        status: "wrong_answer",
+        stderr: `expected ${JSON.stringify(testCase.expectedJson)}, got ${JSON.stringify(actual)}`
+      };
+    }
+    return { status: "accepted" };
+  } catch (error) {
+    return {
+      status: error?.code === "ERR_SCRIPT_EXECUTION_TIMEOUT" ? "time_limit_exceeded" : "runtime_error",
+      stderr: error instanceof Error ? error.stack || error.message : "Runtime failed"
+    };
+  }
 }
