@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { AuthSession, BankScope, Language, PracticeFeedbackMode, Problem, Question, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
@@ -764,12 +764,13 @@ function BankPanel(props: {
   onDeleteSuite?: (id: string) => void;
 }) {
   const disabled = props.scope === "public" && props.user.role !== "admin";
+  const suiteCount = props.suites.length;
   return (
     <section className="bank-section">
       <button className="bank-heading" onClick={props.onToggleBank}>
         <span className={props.open ? "chevron open" : "chevron"} aria-hidden="true" />
         <strong>{props.title}</strong>
-        {disabled && <span>admin edit</span>}
+        <span>{disabled ? "admin edit" : `${suiteCount} suites`}</span>
       </button>
       {props.open && (
         <>
@@ -789,6 +790,7 @@ function BankPanel(props: {
                 onSelectSuite={props.onSelectSuite}
                 onDeleteTopic={props.onDeleteTopic}
                 onDeleteSuite={props.onDeleteSuite}
+                depth={0}
               />
             )) : <div className="bank-empty">No topics yet.</div>}
           </div>
@@ -815,25 +817,45 @@ function TopicNodeView(props: {
   onSelectSuite: (id: string) => void;
   onDeleteTopic?: (id: string) => void;
   onDeleteSuite?: (id: string) => void;
+  depth: number;
 }) {
   const open = props.openTopics[props.topic.id] ?? true;
   const topicSuites = getTopicSuiteItems(props.topic, props.suites);
+  const nestedSuiteCount = countTopicSuites(props.topic, props.suites);
   const hasChildren = Boolean(props.topic.children?.length || topicSuites.length);
   const isActiveFolder = !props.activeSuiteId && props.topic.id === props.activeTopicId;
   return (
-    <div>
+    <div className="topic-node" style={{ "--depth": props.depth } as CSSProperties}>
       <div className={isActiveFolder ? "topic-row active" : "topic-row"}>
         <button className="collapse-button" onClick={() => props.onToggleTopic(props.topic.id)} aria-label={open ? "Collapse topic" : "Expand topic"}>
           {hasChildren && <span className={open ? "chevron open" : "chevron"} aria-hidden="true" />}
         </button>
         <button className="topic-main" onClick={() => props.onSelectFolder(props.scope, props.topic)}>
           <strong>{props.topic.name}</strong>
-          <span>{props.topic.scorePercent}% ({props.topic.done}/{props.topic.total})</span>
+          <span>{props.topic.total ? `${props.topic.scorePercent}% (${props.topic.done}/${props.topic.total})` : `${nestedSuiteCount} suites`}</span>
         </button>
         {props.onDeleteTopic && <button className="icon-button topic-delete" onClick={() => props.onDeleteTopic?.(props.topic.id)} title="Delete topic" aria-label="Delete topic">x</button>}
       </div>
       {open && (
         <div className="child-topic">
+          {props.topic.children?.map((child) => (
+            <TopicNodeView
+              key={child.id}
+              topic={child}
+              scope={props.scope}
+              suites={props.suites}
+              activeTopicId={props.activeTopicId}
+              activeSuiteId={props.activeSuiteId}
+              openTopics={props.openTopics}
+              onToggleTopic={props.onToggleTopic}
+              onSelectTopic={props.onSelectTopic}
+              onSelectFolder={props.onSelectFolder}
+              onSelectSuite={props.onSelectSuite}
+              onDeleteTopic={props.onDeleteTopic}
+              onDeleteSuite={props.onDeleteSuite}
+              depth={props.depth + 1}
+            />
+          ))}
           {topicSuites.map((suite) => (
             <div key={suite.id} className="suite-row">
               <button className={suite.id === props.activeSuiteId ? "suite-tree-item active" : "suite-tree-item"} onClick={() => props.onSelectSuite(suite.id)}>
@@ -1164,8 +1186,12 @@ function collectTopicIds(nodes: TopicNode[], topicId: string) {
 }
 
 function getTopicSuiteItems(topic: TopicNode, allSuites: TrainingSuite[]) {
-  const childIds = new Set((topic.children || []).map((child) => child.id));
-  return allSuites.filter((suite) => suite.topicId === topic.id || childIds.has(suite.topicId));
+  return allSuites.filter((suite) => suite.topicId === topic.id);
+}
+
+function countTopicSuites(topic: TopicNode, allSuites: TrainingSuite[]): number {
+  const topicIds = new Set([topic.id, ...flattenTopics(topic.children || []).map((child) => child.id)]);
+  return allSuites.filter((suite) => topicIds.has(suite.topicId)).length;
 }
 
 function pickSuiteTopicId(nodes: TopicNode[], targetScope: BankScope, preferredId?: string) {
