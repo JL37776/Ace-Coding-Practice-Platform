@@ -184,7 +184,7 @@ export default function App() {
   const [newSuiteTitle, setNewSuiteTitle] = useState<Record<BankScope, string>>({ public: "", personal: "" });
   const [openBank, setOpenBank] = useState<Record<BankScope, boolean>>({ public: true, personal: true });
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({});
-  const [sidebarWidth, setSidebarWidth] = useState(360);
+  const [sidebarWidth, setSidebarWidth] = useState(320);
   const [editingTitle, setEditingTitle] = useState<Record<string, string>>({});
   const [editingDescription, setEditingDescription] = useState<Record<string, string>>({});
   const [editingDuration, setEditingDuration] = useState<Record<string, string>>({});
@@ -493,7 +493,7 @@ export default function App() {
     const startX = event.clientX;
     const startWidth = sidebarWidth;
     const move = (moveEvent: MouseEvent) => {
-      const next = Math.min(620, Math.max(280, startWidth + moveEvent.clientX - startX));
+      const next = Math.min(420, Math.max(260, startWidth + moveEvent.clientX - startX));
       setSidebarWidth(next);
     };
     const stop = () => {

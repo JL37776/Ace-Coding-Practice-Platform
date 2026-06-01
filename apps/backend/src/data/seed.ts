@@ -87,7 +87,7 @@ export const topics: TopicNode[] = [
         id: "topic-csharp",
         scope: "public",
         parentId: "topic-language-framework-tracks",
-        name: "C# 专栏",
+        name: "C# Track",
         scorePercent: 0,
         done: 0,
         total: 0
@@ -96,7 +96,7 @@ export const topics: TopicNode[] = [
         id: "topic-dotnet",
         scope: "public",
         parentId: "topic-language-framework-tracks",
-        name: ".NET 专栏",
+        name: ".NET Track",
         scorePercent: 0,
         done: 0,
         total: 0
@@ -105,7 +105,7 @@ export const topics: TopicNode[] = [
         id: "topic-react",
         scope: "public",
         parentId: "topic-language-framework-tracks",
-        name: "React 专栏",
+        name: "React Track",
         scorePercent: 0,
         done: 0,
         total: 0
@@ -114,7 +114,7 @@ export const topics: TopicNode[] = [
         id: "topic-java",
         scope: "public",
         parentId: "topic-language-framework-tracks",
-        name: "Java 专栏",
+        name: "Java Track",
         scorePercent: 0,
         done: 0,
         total: 0

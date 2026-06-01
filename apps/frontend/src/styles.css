@@ -153,6 +153,11 @@ select {
   gap: 16px;
 }
 
+.brand-row h1 {
+  font-size: 20px;
+  line-height: 1.15;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   color: #3b82f6;
@@ -219,7 +224,7 @@ p {
   gap: 8px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 10px;
+  padding: 8px;
   background: white;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
@@ -233,7 +238,7 @@ p {
   border: 0;
   background: transparent;
   color: #0f172a;
-  padding: 2px 0 6px;
+  padding: 2px 4px 6px;
   text-align: left;
 }
 
@@ -260,7 +265,7 @@ p {
 .bank-heading span,
 .bank-empty {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .bank-add {
@@ -340,7 +345,7 @@ p {
   padding: 0;
   overflow: hidden;
   align-items: center;
-  margin-left: calc(var(--depth, 0) * 10px);
+  margin-left: calc(var(--depth, 0) * 8px);
 }
 
 .topic-row.active {
@@ -372,7 +377,7 @@ p {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 9px 8px;
+  padding: 7px 6px;
   text-align: left;
   flex: 1;
   min-width: 0;
@@ -381,23 +386,28 @@ p {
 .topic-main strong {
   overflow: hidden;
   color: inherit;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .topic-delete {
-  width: 32px;
+  width: 24px;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   border-left: 0;
   color: #94a3b8;
-  font-size: 18px;
+  font-size: 14px;
+  opacity: 0;
   transition: all 0.15s ease;
   cursor: pointer;
+}
+
+.topic-row:hover .topic-delete {
+  opacity: 1;
 }
 
 .topic-delete:hover {
@@ -408,7 +418,7 @@ p {
 .topic-main span,
 .topic span {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .child-topic {
@@ -425,7 +435,7 @@ p {
   display: flex;
   gap: 0;
   margin-top: 3px;
-  margin-left: calc((var(--depth, 0) + 1) * 10px + 20px);
+  margin-left: calc((var(--depth, 0) + 1) * 8px + 18px);
   border-radius: 8px;
   overflow: hidden;
   align-items: stretch;
@@ -437,11 +447,19 @@ p {
   gap: 2px;
   border: 1px solid transparent;
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 6px 8px;
   background: transparent;
   color: #334155;
   text-align: left;
   position: relative;
+}
+
+.suite-tree-item strong {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .suite-row .suite-tree-item {
@@ -451,8 +469,8 @@ p {
 }
 
 .suite-delete {
-  width: 36px;
-  min-width: 36px;
+  width: 24px;
+  min-width: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -461,10 +479,15 @@ p {
   border-radius: 0 8px 8px 0;
   background: transparent;
   color: #94a3b8;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 300;
   transition: all 0.15s ease;
   cursor: pointer;
+  opacity: 0;
+}
+
+.suite-row:hover .suite-delete {
+  opacity: 1;
 }
 
 .suite-delete:hover {
@@ -481,12 +504,12 @@ p {
 
 .suite-tree-item span {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .suite-tree-item small {
   color: #2563eb;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .suite-tree-item.add-suite-row {
