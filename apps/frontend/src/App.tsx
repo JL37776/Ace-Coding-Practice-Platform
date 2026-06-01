@@ -46,13 +46,53 @@ Rules:
 - Supported question types only: single, multiple, boolean, blank, coding.
 - Use a balanced mix unless the user asks for only one type.
 - Every non-coding question must include answer= and explanation=.
-- single: provide A=, B=, C= or more options, answer=A.
-- multiple: provide options, answer=A,C.
-- boolean: answer=true or answer=false.
-- blank: answer=exact expected text.
-- coding: include title, description, tags, and a short starter requirement. Keep it runnable later by the code runner.
-- Difficulty should match the requested learner level.
-- Generate realistic interview/training questions, not vague trivia.
+
+Single-choice example (exactly one correct answer):
+@q
+type=single
+title=Which principle means one class should have one reason to change?
+A=Single Responsibility Principle
+B=Open Closed Principle
+C=Dependency Inversion Principle
+answer=A
+explanation=SRP keeps a class focused on one responsibility.
+tags=oop,solid
+
+Multiple-choice example (multiple correct answers):
+@q
+type=multiple
+title=Which of these are SOLID principles? (Select all that apply)
+A=DRY (Don't Repeat Yourself)
+B=Single Responsibility Principle
+C=Interface Segregation Principle
+D=Copy-paste principle
+answer=B,C
+explanation=SRP and ISP are SOLID principles. DRY and Copy-paste are not part of SOLID.
+tags=oop,solid
+
+Boolean example (true/false statement):
+@q
+type=boolean
+title=JavaScript and TypeScript can both run through the Node runner.
+answer=true
+explanation=Both languages run on Node.js runtime.
+tags=runner,js
+
+Fill-in-blank example (exact text match):
+@q
+type=blank
+title=In Python, use ___ to create an empty list.
+answer=[]
+explanation=The square bracket notation creates an empty list in Python.
+tags=python,basics
+
+Coding example (with problem ID and starter code):
+@q
+type=coding
+title=Two Sum Problem
+description=Given an array of integers and a target sum, return indices of two numbers that add up to target.
+problemId=two-sum
+tags=arrays,hashmap
 
 Format:
 @suite
@@ -61,19 +101,10 @@ description=<what this suite trains>
 duration=<minutes>
 
 @q
-type=single
+type=<single|multiple|boolean|blank|coding>
 title=<question>
-A=<option>
-B=<option>
-C=<option>
-answer=<option id>
-explanation=<why>
-tags=<comma,separated,tags>
-
-@q
-type=boolean
-title=<statement>
-answer=true
+[type-specific fields]
+answer=<answer>
 explanation=<why>
 tags=<comma,separated,tags>`;
 
@@ -109,6 +140,10 @@ export default function App() {
   const [openBank, setOpenBank] = useState<Record<BankScope, boolean>>({ public: true, personal: true });
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({});
   const [sidebarWidth, setSidebarWidth] = useState(360);
+  const [editingTitle, setEditingTitle] = useState<Record<string, string>>({});
+  const [editingDescription, setEditingDescription] = useState<Record<string, string>>({});
+  const [editingDuration, setEditingDuration] = useState<Record<string, string>>({});
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const publicTopics = topics.filter((topic) => topic.scope === "public");
   const personalTopics = topics.filter((topic) => topic.scope === "personal");
@@ -243,6 +278,37 @@ export default function App() {
       setActiveSuiteId("");
     } catch (error) {
       alert("Failed to delete suite: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
+  }
+
+  async function saveEditedSuite() {
+    if (!activeSuite) return;
+    if (isSavingEdit) return;
+    
+    setIsSavingEdit(true);
+    try {
+      const title = editingTitle[activeSuite.id] !== undefined ? editingTitle[activeSuite.id] : activeSuite.title;
+      const description = editingDescription[activeSuite.id] !== undefined ? editingDescription[activeSuite.id] : activeSuite.description;
+      const durationMinutes = editingDuration[activeSuite.id] !== undefined ? parseInt(editingDuration[activeSuite.id]) : activeSuite.durationMinutes;
+      
+      if (!title.trim()) {
+        alert("Suite name cannot be empty");
+        return;
+      }
+      
+      if (isNaN(durationMinutes) || durationMinutes < 1 || durationMinutes > 240) {
+        alert("Time limit must be between 1 and 240 minutes");
+        return;
+      }
+      
+      await api.updateSuite(activeSuite.id, { title, description, durationMinutes });
+      await refreshWorkspace();
+      setEditorMessage("Suite updated successfully!");
+      setTimeout(() => setEditorMessage(""), 3000);
+    } catch (error) {
+      alert("Failed to save suite: " + (error instanceof Error ? error.message : "Unknown error"));
+    } finally {
+      setIsSavingEdit(false);
     }
   }
 
@@ -466,6 +532,14 @@ export default function App() {
             onImportRaw={() => void importRaw()}
             aiPromptTemplate={aiPromptTemplate}
             onFeedbackMode={(value) => activeSuiteId && setSuiteFeedbackMode({ ...suiteFeedbackMode, [activeSuiteId]: value })}
+            editingTitle={editingTitle}
+            editingDescription={editingDescription}
+            editingDuration={editingDuration}
+            isSavingEdit={isSavingEdit}
+            onEditTitle={(id, value) => setEditingTitle({ ...editingTitle, [id]: value })}
+            onEditDescription={(id, value) => setEditingDescription({ ...editingDescription, [id]: value })}
+            onEditDuration={(id, value) => setEditingDuration({ ...editingDuration, [id]: value })}
+            onSaveEdit={() => void saveEditedSuite()}
             onPractice={() => {
               setQuestionIndex(0);
               setFeedback("");
@@ -613,10 +687,18 @@ function SuiteConfig(props: {
   rawPreview: string;
   editorMessage: string;
   aiPromptTemplate: string;
+  editingTitle: Record<string, string>;
+  editingDescription: Record<string, string>;
+  editingDuration: Record<string, string>;
+  isSavingEdit: boolean;
   onRawText: (value: string) => void;
   onParseRaw: () => void;
   onImportRaw: () => void;
   onFeedbackMode: (mode: PracticeFeedbackMode) => void;
+  onEditTitle: (id: string, value: string) => void;
+  onEditDescription: (id: string, value: string) => void;
+  onEditDuration: (id: string, value: string) => void;
+  onSaveEdit: () => void;
   onPractice: () => void;
 }) {
   return (
@@ -634,12 +716,32 @@ function SuiteConfig(props: {
         <section className="panel">
           <div className="panel-heading">
             <div><h3>Create / Edit Test Suite</h3><p>This page configures the suite. Code appears only inside coding questions during practice.</p></div>
-            <button className="secondary" disabled>💾 Save</button>
+            <button className="secondary" onClick={props.onSaveEdit} disabled={props.isSavingEdit}>💾 Save</button>
           </div>
           <div className="form-grid">
-            <label>Suite Name<input value={props.activeSuite?.title || ""} readOnly /></label>
+            <label>Suite Name
+              <input 
+                value={props.editingTitle[props.activeSuite?.id || ""] !== undefined ? props.editingTitle[props.activeSuite?.id || ""] : props.activeSuite?.title || ""} 
+                onChange={(e) => props.activeSuite && props.onEditTitle(props.activeSuite.id, e.target.value)}
+              />
+            </label>
             <label>Parent Topic<input value={props.activeTopicId} readOnly /></label>
-            <label>Time Limit<input value={`${props.activeSuite?.durationMinutes || 15} minutes`} readOnly /></label>
+            <label>Time Limit (minutes)
+              <input 
+                type="number"
+                min="1"
+                max="240"
+                value={props.editingDuration[props.activeSuite?.id || ""] !== undefined ? props.editingDuration[props.activeSuite?.id || ""] : props.activeSuite?.durationMinutes || 15} 
+                onChange={(e) => props.activeSuite && props.onEditDuration(props.activeSuite.id, e.target.value)}
+              />
+            </label>
+            <label>Description
+              <textarea
+                value={props.editingDescription[props.activeSuite?.id || ""] !== undefined ? props.editingDescription[props.activeSuite?.id || ""] : props.activeSuite?.description || ""}
+                onChange={(e) => props.activeSuite && props.onEditDescription(props.activeSuite.id, e.target.value)}
+                style={{ minHeight: "60px" }}
+              />
+            </label>
             <label>Question Count<input value={`${props.activeSuite?.questionCount || props.activeQuestions.length} questions`} readOnly /></label>
           </div>
           <div className="mode-switch">

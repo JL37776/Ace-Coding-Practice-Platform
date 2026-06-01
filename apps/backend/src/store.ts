@@ -99,6 +99,19 @@ export const store = {
       }
     }
   },
+  updateSuite(id: string, updates: Partial<TrainingSuite>, user: User) {
+    const suite = suites.find(s => s.id === id);
+    if (!suite) throw new Error("Suite not found");
+    if (!canReadScoped(suite, user)) throw new Error("Access denied");
+    
+    if (updates.title !== undefined) suite.title = updates.title;
+    if (updates.description !== undefined) suite.description = updates.description;
+    if (updates.durationMinutes !== undefined) suite.durationMinutes = updates.durationMinutes;
+    if (updates.allowedTypes !== undefined) suite.allowedTypes = updates.allowedTypes;
+    if (updates.feedbackMode !== undefined) suite.feedbackMode = updates.feedbackMode;
+    
+    return suite;
+  },
   listSubmissions(user: User) {
     return Array.from(submissions.values())
       .filter((submission) => user.role === "admin" || submission.userId === user.id)

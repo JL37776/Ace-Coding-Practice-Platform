@@ -68,6 +68,8 @@ export const api = {
   }) => request<TrainingSuite>("/api/suites", { method: "POST", body: JSON.stringify(input) }),
   deleteSuite: (id: string) =>
     request<void>(`/api/suites/${id}`, { method: "DELETE" }),
+  updateSuite: (id: string, input: Partial<TrainingSuite>) =>
+    request<TrainingSuite>(`/api/suites/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   listQuestions: (suiteId?: string, scope?: "public" | "personal") => {
     const params = new URLSearchParams();
     if (suiteId) params.set("suiteId", suiteId);

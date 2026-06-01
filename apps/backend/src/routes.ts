@@ -34,6 +34,14 @@ const createSuiteSchema = z.object({
   feedbackMode: z.enum(["instant", "final"]).default("instant")
 });
 
+const updateSuiteSchema = z.object({
+  title: z.string().min(1).max(160).optional(),
+  description: z.string().max(1000).optional(),
+  durationMinutes: z.number().int().min(1).max(240).optional(),
+  allowedTypes: z.array(z.enum(["single", "multiple", "boolean", "blank", "coding"])).min(1).optional(),
+  feedbackMode: z.enum(["instant", "final"]).optional()
+});
+
 const createTopicSchema = z.object({
   scope: z.enum(["public", "personal"]).default("personal"),
   parentId: z.string().optional(),
@@ -208,6 +216,16 @@ export function createApiRouter() {
     try {
       store.deleteSuite(req.params.id, req.user!);
       res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/suites/:id", requireUser, (req, res, next) => {
+    try {
+      const payload = updateSuiteSchema.parse(req.body);
+      const updated = store.updateSuite(req.params.id, payload, req.user!);
+      res.json({ data: updated });
     } catch (error) {
       next(error);
     }
