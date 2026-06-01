@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
-import type { AuthSession, BankScope, Language, PracticeFeedbackMode, Problem, Question, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
+import type { AuthSession, BankScope, Language, PracticeFeedbackMode, PracticeSessionMode, Problem, Question, StudyDashboard, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { javascript } from "@codemirror/lang-javascript";
@@ -169,6 +169,8 @@ export default function App() {
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [feedback, setFeedback] = useState("");
   const [finalSubmitted, setFinalSubmitted] = useState(false);
+  const [activePracticeMode, setActivePracticeMode] = useState<PracticeSessionMode>("practice");
+  const [studyDashboard, setStudyDashboard] = useState<StudyDashboard | undefined>();
   const [suiteFeedbackMode, setSuiteFeedbackMode] = useState<Record<string, PracticeFeedbackMode>>({});
   const [language, setLanguage] = useState<Language>("python");
   const [sourceCode, setSourceCode] = useState(starterCode.python);
@@ -218,6 +220,11 @@ export default function App() {
     if (!user) return;
     void refreshWorkspace();
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    void refreshStudyDashboard(activeSuiteId || undefined);
+  }, [user, activeSuiteId]);
 
   useEffect(() => {
     if (!submissions.some((submission) => submission.status === "queued" || submission.status === "running")) return;
@@ -282,6 +289,52 @@ export default function App() {
 
   async function refreshSubmissions() {
     setSubmissions(await api.listSubmissions());
+  }
+
+  async function refreshStudyDashboard(suiteId?: string) {
+    setStudyDashboard(await api.getStudyDashboard(suiteId));
+  }
+
+  async function startStudySession(sessionMode: PracticeSessionMode) {
+    if (!activeSuite) return;
+    setActivePracticeMode(sessionMode);
+    setFeedback("");
+    setFinalSubmitted(false);
+    setQuestionResults({});
+    if (sessionMode === "practice") {
+      const dashboard = await api.getStudyDashboard(activeSuite.id);
+      setStudyDashboard(dashboard);
+      setAnswers(dashboard.progress?.answers || {});
+      setQuestionIndex(Math.min(dashboard.progress?.questionIndex || 0, Math.max(activeQuestions.length - 1, 0)));
+    } else {
+      setAnswers({});
+      setQuestionIndex(0);
+    }
+    setMode("practice");
+  }
+
+  async function savePracticeDraft(nextAnswers: Record<string, unknown>, nextIndex = questionIndex) {
+    if (!activeSuiteId || activePracticeMode !== "practice") return;
+    await api.savePracticeProgress(activeSuiteId, { questionIndex: nextIndex, answers: nextAnswers });
+    void refreshStudyDashboard(activeSuiteId);
+  }
+
+  async function recordCompletedQuestions(questionIds: string[]) {
+    if (!activeSuiteId || !questionIds.length) return;
+    setStudyDashboard(await api.completeStudySession(activeSuiteId, {
+      mode: activePracticeMode,
+      questionIds,
+      questionCount: activeQuestions.length
+    }));
+  }
+
+  function getAnsweredQuestionIds(nextAnswers = answers) {
+    return activeQuestions
+      .filter((question) => {
+        const value = nextAnswers[question.id];
+        return value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0);
+      })
+      .map((question) => question.id);
   }
 
   async function authenticate() {
@@ -436,6 +489,9 @@ export default function App() {
     try {
       const submission = await api.createSubmission({ problemId: selectedProblem.id, language, sourceCode });
       setSubmissions((items) => [submission, ...items]);
+      if (activePracticeMode === "practice" && currentQuestion) {
+        await recordCompletedQuestions([currentQuestion.id]);
+      }
       window.setTimeout(() => void refreshSubmissions(), 700);
     } finally {
       setIsSubmitting(false);
@@ -452,20 +508,34 @@ export default function App() {
     const expected = currentQuestion.answer;
     const ok = JSON.stringify(value) === JSON.stringify(expected);
     setQuestionResults((results) => ({ ...results, [currentQuestion.id]: ok ? "correct" : "incorrect" }));
-    if (activeFeedbackMode === "instant" && ok && questionIndex < activeQuestions.length - 1) {
+    if (activePracticeMode === "practice") {
+      void recordCompletedQuestions([currentQuestion.id]);
+    }
+    if (activePracticeMode === "practice" && ok && questionIndex < activeQuestions.length - 1) {
+      const nextIndex = Math.min(questionIndex + 1, activeQuestions.length - 1);
       setFeedback("");
-      setQuestionIndex((index) => Math.min(index + 1, activeQuestions.length - 1));
+      setQuestionIndex(nextIndex);
+      void savePracticeDraft(answers, nextIndex);
       return;
     }
     setFeedback(ok ? "Correct." : `Submitted. Expected answer: ${JSON.stringify(expected)}`);
   }
 
   function answerQuestion(questionId: string, value: unknown) {
-    setAnswers({ ...answers, [questionId]: value });
-    if (activeFeedbackMode === "instant") setFeedback("");
+    const nextAnswers = { ...answers, [questionId]: value };
+    setAnswers(nextAnswers);
+    if (activePracticeMode === "practice") {
+      setFeedback("");
+      void savePracticeDraft(nextAnswers);
+    }
   }
 
   function submitFinalPractice() {
+    const answeredIds = getAnsweredQuestionIds();
+    if (activePracticeMode === "exam" && answeredIds.length < activeQuestions.length) {
+      setFeedback(`Exam requires all questions before submit. ${activeQuestions.length - answeredIds.length} remaining.`);
+      return;
+    }
     // Calculate results for all questions
     const results: Record<string, "correct" | "incorrect"> = { ...questionResults };
     for (const question of activeQuestions) {
@@ -481,6 +551,10 @@ export default function App() {
     setQuestionResults(results);
     setFinalSubmitted(true);
     setFeedback("Submitted. Answers and explanations are now visible.");
+    void recordCompletedQuestions(answeredIds);
+    if (activePracticeMode === "exam" && activeSuiteId) {
+      void api.clearPracticeProgress(activeSuiteId);
+    }
   }
 
   function selectTopic(targetScope: BankScope, id: string) {
@@ -547,9 +621,13 @@ export default function App() {
         isSubmitting={isSubmitting}
         selectedProblem={selectedProblem}
         remainingSeconds={remainingSeconds}
-        feedbackMode={activeFeedbackMode}
+        feedbackMode={activePracticeMode === "practice" ? "instant" : "final"}
+        sessionMode={activePracticeMode}
         finalSubmitted={finalSubmitted}
-        onBack={() => setMode("config")}
+        onBack={() => {
+          if (activePracticeMode === "practice") void savePracticeDraft(answers, questionIndex);
+          setMode("config");
+        }}
         onQuestionIndex={(index) => { setQuestionIndex(index); setFeedback(""); }}
         onAnswer={answerQuestion}
         onSubmitNonCoding={submitNonCoding}
@@ -650,6 +728,7 @@ export default function App() {
             rawText={rawText}
             rawPreview={rawPreview}
             editorMessage={editorMessage}
+            studyDashboard={studyDashboard}
             onRawText={setRawText}
             onParseRaw={() => void parseRaw()}
             onValidateRaw={() => void validateAndImportRaw()}
@@ -664,12 +743,8 @@ export default function App() {
             onEditDuration={(id, value) => setEditingDuration({ ...editingDuration, [id]: value })}
             onSaveEdit={() => void saveEditedSuite()}
             onDeleteSuite={deleteSuite}
-            onPractice={() => {
-              setQuestionIndex(0);
-              setFeedback("");
-              setFinalSubmitted(false);
-              setMode("practice");
-            }}
+            onStartPractice={() => void startStudySession("practice")}
+            onStartExam={() => void startStudySession("exam")}
           />
         ) : mode === "config" ? (
           <EmptySuiteState
@@ -891,6 +966,7 @@ function SuiteConfig(props: {
   rawParsedQuestions: Question[];
   activeTopicId: string;
   feedbackMode: PracticeFeedbackMode;
+  studyDashboard?: StudyDashboard;
   rawText: string;
   rawPreview: string;
   editorMessage: string;
@@ -908,17 +984,23 @@ function SuiteConfig(props: {
   onEditDuration: (id: string, value: string) => void;
   onSaveEdit: () => void;
   onDeleteSuite: (id: string) => void;
-  onPractice: () => void;
+  onStartPractice: () => void;
+  onStartExam: () => void;
 }) {
   return (
     <>
-      <header className="hero-bar compact">
+      <header className="suite-dashboard">
         <div>
           <p className="eyebrow">Suite Configuration</p>
           <h2>{props.activeSuite?.title || "Choose or create a suite"}</h2>
           <p>{props.activeSuite?.description || "Paste a whole raw suite, set time, add similar questions, then practice."}</p>
         </div>
-        <button className="practice-button" onClick={props.onPractice} disabled={!props.activeQuestions.length}>Practice</button>
+        <StudyDashboardPanel
+          dashboard={props.studyDashboard}
+          questionCount={props.activeQuestions.length}
+          onStartPractice={props.onStartPractice}
+          onStartExam={props.onStartExam}
+        />
       </header>
 
       <section className="editor-grid">
@@ -985,6 +1067,63 @@ function SuiteConfig(props: {
   );
 }
 
+function StudyDashboardPanel(props: {
+  dashboard?: StudyDashboard;
+  questionCount: number;
+  onStartPractice: () => void;
+  onStartExam: () => void;
+}) {
+  const progressCount = props.dashboard?.progress ? Object.keys(props.dashboard.progress.answers).length : 0;
+  return (
+    <aside className="study-dashboard">
+      <div className="study-dashboard-top">
+        <div>
+          <span>Today</span>
+          <strong>{props.dashboard?.todayCount || 0}</strong>
+        </div>
+        <div>
+          <span>90-day total</span>
+          <strong>{props.dashboard?.totalCount || 0}</strong>
+        </div>
+        <div>
+          <span>Active days</span>
+          <strong>{props.dashboard?.activeDays || 0}</strong>
+        </div>
+      </div>
+      <ActivityHeatmap activity={props.dashboard?.heatmap || []} />
+      <div className="study-actions">
+        <button onClick={props.onStartPractice} disabled={!props.questionCount}>
+          <span>{progressCount ? "Continue Practice" : "Practice Mode"}</span>
+          <small>{progressCount ? `${progressCount} saved answers` : "Auto saves unfinished work"}</small>
+        </button>
+        <button className="exam-action" onClick={props.onStartExam} disabled={!props.questionCount}>
+          <span>Exam Mode</span>
+          <small>Only full submissions are recorded</small>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function ActivityHeatmap({ activity }: { activity: StudyDashboard["heatmap"] }) {
+  const byDate = new Map(activity.map((item) => [item.date, item.count]));
+  const days = Array.from({ length: 90 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (89 - index));
+    const key = date.toISOString().slice(0, 10);
+    return { key, count: byDate.get(key) || 0 };
+  });
+  const max = Math.max(1, ...days.map((day) => day.count));
+  return (
+    <div className="heatmap" aria-label="Daily solved question heatmap">
+      {days.map((day) => {
+        const level = day.count === 0 ? 0 : Math.ceil((day.count / max) * 4);
+        return <span key={day.key} className={`heat-${level}`} title={`${day.key}: ${day.count} questions`} />;
+      })}
+    </div>
+  );
+}
+
 function PracticePanel(props: {
   suite?: TrainingSuite;
   questions: Question[];
@@ -999,6 +1138,7 @@ function PracticePanel(props: {
   selectedProblem?: Problem;
   remainingSeconds: number;
   feedbackMode: PracticeFeedbackMode;
+  sessionMode: PracticeSessionMode;
   finalSubmitted: boolean;
   onBack: () => void;
   onQuestionIndex: (index: number) => void;
@@ -1024,7 +1164,7 @@ function PracticePanel(props: {
           <h2>{props.suite?.title || "Practice Suite"}</h2>
         </div>
         <div className="practice-status">
-          <div className="timer-card"><span>Mode</span><strong>{props.feedbackMode === "instant" ? "Instant" : "Final"}</strong></div>
+          <div className="timer-card"><span>Mode</span><strong>{props.sessionMode === "practice" ? "Practice" : "Exam"}</strong></div>
           <div className="timer-card" style={{background: props.remainingSeconds < 300 ? "linear-gradient(135deg, #fee2e2, #fecaca)" : undefined, borderColor: props.remainingSeconds < 300 ? "#fca5a5" : undefined}}><span>Time Left</span><strong style={{color: props.remainingSeconds < 300 ? "#991b1b" : "#0f172a"}}>{formatSeconds(props.remainingSeconds)}</strong></div>
           <div className="timer-card"><span>Progress</span><strong>{progress}%</strong></div>
           <button className="secondary" onClick={props.onBack}>Exit</button>
@@ -1089,9 +1229,13 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
     return (
       <>
         <div className="panel-heading"><div><h3>{props.question.title}</h3><p>{props.question.description || props.selectedProblem?.statement}</p></div><select value={props.language} onChange={(event) => props.onLanguage(event.target.value as Language)}>{languages.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-        <CodeEditor language={props.language} value={props.sourceCode} onChange={props.onSourceCode} />
-        <div className="actions"><button onClick={props.onSubmitCode} disabled={props.isSubmitting || !props.selectedProblem}>{props.isSubmitting ? "Running..." : "Run Code"}</button><button className="secondary" onClick={props.onRefresh}>Refresh</button></div>
-        <ResultList submissions={props.submissions} />
+        <div className="coding-workbench">
+          <div className="coding-editor-pane">
+            <CodeEditor language={props.language} value={props.sourceCode} onChange={props.onSourceCode} />
+            <div className="actions"><button onClick={props.onSubmitCode} disabled={props.isSubmitting || !props.selectedProblem}>{props.isSubmitting ? "Running..." : "Run Code"}</button><button className="secondary" onClick={props.onRefresh}>Refresh</button></div>
+          </div>
+          <ResultList submissions={props.submissions} />
+        </div>
       </>
     );
   }
@@ -1105,6 +1249,7 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
       {props.question.type === "blank" && <input className="answer-input" placeholder="Type your answer" value={(value as string | undefined) || ""} onChange={(event) => props.onAnswer(props.question.id, event.target.value)} />}
       {props.feedbackMode === "instant" ? <div className="actions"><button onClick={props.onSubmitNonCoding}>Submit Answer</button></div> : <div className="notice">Answer saved. Submit the suite at the end to show answers.</div>}
       {props.feedback && props.feedbackMode === "instant" && <div className="notice">{props.feedback}</div>}
+      {props.feedback && props.feedbackMode === "final" && <div className="notice">{props.feedback}</div>}
       {showAnswer && <AnswerReveal question={props.question} />}
     </>
   );

@@ -4,7 +4,10 @@ import type {
   CreateSubmissionInput,
   Problem,
   Question,
+  PracticeProgress,
+  PracticeSessionMode,
   Submission,
+  StudyDashboard,
   SystemSettings,
   TopicNode,
   TrainingSuite,
@@ -94,5 +97,16 @@ export const api = {
   createSubmission: (input: CreateSubmissionInput) =>
     request<Submission>("/api/submissions", { method: "POST", body: JSON.stringify(input) }),
   getSubmission: (id: string) => request<Submission>(`/api/submissions/${id}`),
-  listSubmissions: () => request<Submission[]>("/api/submissions")
+  listSubmissions: () => request<Submission[]>("/api/submissions"),
+  getStudyDashboard: (suiteId?: string) => {
+    const params = new URLSearchParams();
+    if (suiteId) params.set("suiteId", suiteId);
+    return request<StudyDashboard>(`/api/study/dashboard${params.size ? `?${params}` : ""}`);
+  },
+  savePracticeProgress: (suiteId: string, input: { questionIndex: number; answers: Record<string, unknown> }) =>
+    request<PracticeProgress>(`/api/study/progress/${suiteId}`, { method: "PUT", body: JSON.stringify(input) }),
+  clearPracticeProgress: (suiteId: string) =>
+    request<void>(`/api/study/progress/${suiteId}`, { method: "DELETE" }),
+  completeStudySession: (suiteId: string, input: { mode: PracticeSessionMode; questionIds: string[]; questionCount: number }) =>
+    request<StudyDashboard>(`/api/study/complete/${suiteId}`, { method: "POST", body: JSON.stringify(input) })
 };

@@ -4,6 +4,7 @@ export type Difficulty = "easy" | "medium" | "hard";
 export type Language = "python" | "typescript" | "javascript" | "sql" | "csharp" | "java";
 export type BankScope = "public" | "personal";
 export type PracticeFeedbackMode = "instant" | "final";
+export type PracticeSessionMode = "practice" | "exam";
 export type SubmissionStatus =
   | "queued"
   | "running"
@@ -145,6 +146,26 @@ export interface CreateSubmissionInput {
   problemId: string;
   language: Submission["language"];
   sourceCode: string;
+}
+
+export interface PracticeProgress {
+  suiteId: string;
+  questionIndex: number;
+  answers: Record<string, unknown>;
+  updatedAt: string;
+}
+
+export interface DailyActivity {
+  date: string;
+  count: number;
+}
+
+export interface StudyDashboard {
+  heatmap: DailyActivity[];
+  progress?: PracticeProgress;
+  todayCount: number;
+  activeDays: number;
+  totalCount: number;
 }
 
 export interface ApiEnvelope<T> {

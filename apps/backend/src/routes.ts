@@ -6,6 +6,7 @@ import * as authStore from "./auth-store.js";
 import { config } from "./config.js";
 import { createJudgeProvider } from "./judge/index.js";
 import { store } from "./store.js";
+import * as studyStore from "./study-store.js";
 
 const createSubmissionSchema = z.object({
   problemId: z.string().min(1),
@@ -70,6 +71,17 @@ const topicRawSchema = z.object({
   topicId: z.string().min(1),
   suiteId: z.string().min(1).optional(),
   raw: z.string().min(1).max(50000)
+});
+
+const saveProgressSchema = z.object({
+  questionIndex: z.number().int().min(0),
+  answers: z.record(z.unknown())
+});
+
+const completeStudySchema = z.object({
+  mode: z.enum(["practice", "exam"]),
+  questionIds: z.array(z.string().min(1)).min(1),
+  questionCount: z.number().int().min(1)
 });
 
 const judgeResultSchema = z.object({
@@ -152,6 +164,57 @@ export function createApiRouter() {
 
   router.get("/settings", requireUser, (_req, res) => {
     res.json({ data: store.getSystemSettings() });
+  });
+
+  router.get("/study/dashboard", requireUser, async (req, res, next) => {
+    try {
+      const suiteId = typeof req.query.suiteId === "string" ? req.query.suiteId : undefined;
+      res.json({ data: await studyStore.getDashboard(req.user!.id, suiteId) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.put("/study/progress/:suiteId", requireUser, async (req, res, next) => {
+    try {
+      const suite = store.getSuite(req.params.suiteId, req.user!);
+      if (!suite) return res.status(404).json({ error: "Suite not found" });
+      const payload = saveProgressSchema.parse(req.body);
+      const progress = await studyStore.saveProgress(req.user!.id, {
+        suiteId: suite.id,
+        questionIndex: payload.questionIndex,
+        answers: payload.answers
+      });
+      res.json({ data: progress });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/study/progress/:suiteId", requireUser, async (req, res, next) => {
+    try {
+      await studyStore.clearProgress(req.user!.id, req.params.suiteId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/study/complete/:suiteId", requireUser, async (req, res, next) => {
+    try {
+      const suite = store.getSuite(req.params.suiteId, req.user!);
+      if (!suite) return res.status(404).json({ error: "Suite not found" });
+      const payload = completeStudySchema.parse(req.body);
+      const uniqueQuestionIds = Array.from(new Set(payload.questionIds));
+      if (payload.mode === "exam" && uniqueQuestionIds.length < payload.questionCount) {
+        return res.status(400).json({ error: "Exam mode requires all questions answered before recording." });
+      }
+      await studyStore.recordActivity(req.user!.id, { suiteId: suite.id, questionIds: uniqueQuestionIds });
+      if (payload.mode === "exam") await studyStore.clearProgress(req.user!.id, suite.id);
+      res.json({ data: await studyStore.getDashboard(req.user!.id, suite.id) });
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.get("/topics", requireUser, (_req, res) => {
