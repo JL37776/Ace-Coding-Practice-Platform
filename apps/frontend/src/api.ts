@@ -62,6 +62,7 @@ export const api = {
     questionCount: number;
     durationMinutes: number;
     allowedTypes: Array<"single" | "multiple" | "boolean" | "blank" | "coding">;
+    feedbackMode?: "instant" | "final";
   }) => request<TrainingSuite>("/api/suites", { method: "POST", body: JSON.stringify(input) }),
   listQuestions: (suiteId?: string, scope?: "public" | "personal") => {
     const params = new URLSearchParams();

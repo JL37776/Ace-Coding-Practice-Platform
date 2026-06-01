@@ -3,6 +3,7 @@ export type QuestionType = "single" | "multiple" | "boolean" | "blank" | "coding
 export type Difficulty = "easy" | "medium" | "hard";
 export type Language = "python" | "typescript" | "javascript" | "sql" | "csharp" | "java";
 export type BankScope = "public" | "personal";
+export type PracticeFeedbackMode = "instant" | "final";
 export type SubmissionStatus =
   | "queued"
   | "running"
@@ -73,6 +74,7 @@ export interface TrainingSuite {
   done: number;
   total: number;
   allowedTypes: QuestionType[];
+  feedbackMode?: PracticeFeedbackMode;
 }
 
 export interface QuestionOption {

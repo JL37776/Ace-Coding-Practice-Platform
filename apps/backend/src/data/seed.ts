@@ -86,7 +86,8 @@ export const suites: TrainingSuite[] = [
     scorePercent: 98,
     done: 49,
     total: 50,
-    allowedTypes: ["coding"]
+    allowedTypes: ["coding"],
+    feedbackMode: "instant"
   },
   {
     id: "suite-oop-basics",
@@ -99,7 +100,8 @@ export const suites: TrainingSuite[] = [
     scorePercent: 74,
     done: 37,
     total: 50,
-    allowedTypes: ["single", "multiple", "boolean", "blank"]
+    allowedTypes: ["single", "multiple", "boolean", "blank"],
+    feedbackMode: "instant"
   },
   {
     id: "suite-basic-noncoding-sample",
@@ -112,7 +114,8 @@ export const suites: TrainingSuite[] = [
     scorePercent: 0,
     done: 0,
     total: 6,
-    allowedTypes: ["single", "blank"]
+    allowedTypes: ["single", "blank"],
+    feedbackMode: "final"
   }
 ];
 

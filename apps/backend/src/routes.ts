@@ -30,7 +30,8 @@ const createSuiteSchema = z.object({
   description: z.string().max(1000),
   questionCount: z.number().int().min(0),
   durationMinutes: z.number().int().min(1).max(240),
-  allowedTypes: z.array(z.enum(["single", "multiple", "boolean", "blank", "coding"])).min(1)
+  allowedTypes: z.array(z.enum(["single", "multiple", "boolean", "blank", "coding"])).min(1),
+  feedbackMode: z.enum(["instant", "final"]).default("instant")
 });
 
 const createTopicSchema = z.object({
@@ -411,7 +412,8 @@ function parseTopicRaw(raw: string, scope: BankScope, topicId: string, user: Use
     scorePercent: 0,
     done: 0,
     total: questions.length,
-    allowedTypes: allowedTypes.length ? allowedTypes : ["single"]
+    allowedTypes: allowedTypes.length ? allowedTypes : ["single"],
+    feedbackMode: suiteFields.feedbackMode === "final" ? "final" : "instant"
   };
   return { suite, questions };
 }

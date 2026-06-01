@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
-import type { AuthSession, BankScope, Language, Problem, Question, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
+import type { AuthSession, BankScope, Language, PracticeFeedbackMode, Problem, Question, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
 import { api, clearAuthToken, setAuthToken } from "./api";
 import "./styles.css";
 
@@ -92,6 +92,8 @@ export default function App() {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [feedback, setFeedback] = useState("");
+  const [finalSubmitted, setFinalSubmitted] = useState(false);
+  const [suiteFeedbackMode, setSuiteFeedbackMode] = useState<Record<string, PracticeFeedbackMode>>({});
   const [language, setLanguage] = useState<Language>("python");
   const [sourceCode, setSourceCode] = useState(starterCode.python);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -111,6 +113,7 @@ export default function App() {
   const publicTopics = topics.filter((topic) => topic.scope === "public");
   const personalTopics = topics.filter((topic) => topic.scope === "personal");
   const activeSuite = suites.find((suite) => suite.id === activeSuiteId);
+  const activeFeedbackMode = (activeSuiteId && suiteFeedbackMode[activeSuiteId]) || activeSuite?.feedbackMode || "instant";
   const activeQuestions = questions.filter((question) => question.suiteId === activeSuiteId);
   const currentQuestion = activeQuestions[questionIndex];
   const codingQuestion = currentQuestion?.type === "coding" ? currentQuestion : undefined;
@@ -212,7 +215,8 @@ export default function App() {
       description: "Created from the suite quick-add panel.",
       questionCount: 0,
       durationMinutes: 15,
-      allowedTypes: ["single", "multiple", "boolean", "blank", "coding"]
+      allowedTypes: ["single", "multiple", "boolean", "blank", "coding"],
+      feedbackMode: "instant"
     });
     setNewSuiteTitle({ ...newSuiteTitle, [targetScope]: "" });
     setScope(targetScope);
@@ -259,6 +263,16 @@ export default function App() {
     const expected = currentQuestion.answer;
     const ok = JSON.stringify(value) === JSON.stringify(expected);
     setFeedback(ok ? "Correct." : `Submitted. Expected answer: ${JSON.stringify(expected)}`);
+  }
+
+  function answerQuestion(questionId: string, value: unknown) {
+    setAnswers({ ...answers, [questionId]: value });
+    if (activeFeedbackMode === "instant") setFeedback("");
+  }
+
+  function submitFinalPractice() {
+    setFinalSubmitted(true);
+    setFeedback("Submitted. Answers and explanations are now visible.");
   }
 
   function selectTopic(targetScope: BankScope, id: string) {
@@ -325,10 +339,13 @@ export default function App() {
         isSubmitting={isSubmitting}
         selectedProblem={selectedProblem}
         remainingSeconds={remainingSeconds}
+        feedbackMode={activeFeedbackMode}
+        finalSubmitted={finalSubmitted}
         onBack={() => setMode("config")}
         onQuestionIndex={(index) => { setQuestionIndex(index); setFeedback(""); }}
-        onAnswer={(questionId, value) => setAnswers({ ...answers, [questionId]: value })}
+        onAnswer={answerQuestion}
         onSubmitNonCoding={submitNonCoding}
+        onSubmitFinal={submitFinalPractice}
         onLanguage={setLanguage}
         onSourceCode={setSourceCode}
         onSubmitCode={() => void submitCode()}
@@ -414,6 +431,7 @@ export default function App() {
             activeQuestions={activeQuestions}
             rawParsedQuestions={rawParsedQuestions}
             activeTopicId={activeTopicId}
+            feedbackMode={activeFeedbackMode}
             rawText={rawText}
             rawPreview={rawPreview}
             editorMessage={editorMessage}
@@ -421,9 +439,11 @@ export default function App() {
             onParseRaw={() => void parseRaw()}
             onImportRaw={() => void importRaw()}
             aiPromptTemplate={aiPromptTemplate}
+            onFeedbackMode={(value) => activeSuiteId && setSuiteFeedbackMode({ ...suiteFeedbackMode, [activeSuiteId]: value })}
             onPractice={() => {
               setQuestionIndex(0);
               setFeedback("");
+              setFinalSubmitted(false);
               setMode("practice");
             }}
           />
@@ -552,6 +572,7 @@ function SuiteConfig(props: {
   activeQuestions: Question[];
   rawParsedQuestions: Question[];
   activeTopicId: string;
+  feedbackMode: PracticeFeedbackMode;
   rawText: string;
   rawPreview: string;
   editorMessage: string;
@@ -559,6 +580,7 @@ function SuiteConfig(props: {
   onRawText: (value: string) => void;
   onParseRaw: () => void;
   onImportRaw: () => void;
+  onFeedbackMode: (mode: PracticeFeedbackMode) => void;
   onPractice: () => void;
 }) {
   return (
@@ -583,6 +605,10 @@ function SuiteConfig(props: {
             <label>Parent Topic<input value={props.activeTopicId} readOnly /></label>
             <label>Time Limit<input value={`${props.activeSuite?.durationMinutes || 15} minutes`} readOnly /></label>
             <label>Question Count<input value={`${props.activeSuite?.questionCount || props.activeQuestions.length} questions`} readOnly /></label>
+          </div>
+          <div className="mode-switch">
+            <button className={props.feedbackMode === "instant" ? "active" : ""} onClick={() => props.onFeedbackMode("instant")}>即时反馈</button>
+            <button className={props.feedbackMode === "final" ? "active" : ""} onClick={() => props.onFeedbackMode("final")}>最后提交显示答案</button>
           </div>
           <div className="type-row">{(props.activeSuite?.allowedTypes || ["single", "multiple", "boolean", "blank", "coding"]).map((type) => <span key={type}>{type}</span>)}</div>
           {props.rawParsedQuestions.length > 0 && <RawQuestionSummary questions={props.rawParsedQuestions} />}
@@ -619,10 +645,13 @@ function PracticePanel(props: {
   isSubmitting: boolean;
   selectedProblem?: Problem;
   remainingSeconds: number;
+  feedbackMode: PracticeFeedbackMode;
+  finalSubmitted: boolean;
   onBack: () => void;
   onQuestionIndex: (index: number) => void;
   onAnswer: (questionId: string, value: unknown) => void;
   onSubmitNonCoding: () => void;
+  onSubmitFinal: () => void;
   onLanguage: (language: Language) => void;
   onSourceCode: (value: string) => void;
   onSubmitCode: () => void;
@@ -642,6 +671,7 @@ function PracticePanel(props: {
           <h2>{props.suite?.title || "Practice Suite"}</h2>
         </div>
         <div className="practice-status">
+          <div className="timer-card"><span>Mode</span><strong>{props.feedbackMode === "instant" ? "Instant" : "Final"}</strong></div>
           <div className="timer-card"><span>Time Left</span><strong>{formatSeconds(props.remainingSeconds)}</strong></div>
           <div className="timer-card"><span>Progress</span><strong>{progress}%</strong></div>
           <button className="secondary" onClick={props.onBack}>Exit Practice</button>
@@ -662,7 +692,7 @@ function PracticePanel(props: {
           <div className="practice-footer">
             <button className="secondary" disabled={props.questionIndex === 0} onClick={() => props.onQuestionIndex(props.questionIndex - 1)}>Previous</button>
             <span>Question {props.questionIndex + 1} of {props.questions.length || 0}</span>
-            <button disabled={props.questionIndex >= props.questions.length - 1} onClick={() => props.onQuestionIndex(props.questionIndex + 1)}>Next</button>
+            {props.feedbackMode === "final" && props.questionIndex >= props.questions.length - 1 ? <button onClick={props.onSubmitFinal}>Submit Suite</button> : <button disabled={props.questionIndex >= props.questions.length - 1} onClick={() => props.onQuestionIndex(props.questionIndex + 1)}>Next</button>}
           </div>
         </section>
       </section>
@@ -696,6 +726,7 @@ function EmptySuiteState(props: {
 
 function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { question: Question }) {
   const value = props.answers[props.question.id];
+  const showAnswer = props.feedbackMode === "final" && props.finalSubmitted;
   if (props.question.type === "coding") {
     return (
       <>
@@ -714,9 +745,19 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
       {props.question.type === "multiple" && <MultiOptionList question={props.question} value={(value as string[] | undefined) || []} onAnswer={props.onAnswer} />}
       {props.question.type === "boolean" && <div className="choice-list"><button className={value === true ? "selected" : ""} onClick={() => props.onAnswer(props.question.id, true)}>True</button><button className={value === false ? "selected" : ""} onClick={() => props.onAnswer(props.question.id, false)}>False</button></div>}
       {props.question.type === "blank" && <input className="answer-input" placeholder="Type your answer" value={(value as string | undefined) || ""} onChange={(event) => props.onAnswer(props.question.id, event.target.value)} />}
-      <div className="actions"><button onClick={props.onSubmitNonCoding}>Submit Answer</button></div>
-      {props.feedback && <div className="notice">{props.feedback}</div>}
+      {props.feedbackMode === "instant" ? <div className="actions"><button onClick={props.onSubmitNonCoding}>Submit Answer</button></div> : <div className="notice">Answer saved. Submit the suite at the end to show answers.</div>}
+      {props.feedback && props.feedbackMode === "instant" && <div className="notice">{props.feedback}</div>}
+      {showAnswer && <AnswerReveal question={props.question} />}
     </>
+  );
+}
+
+function AnswerReveal({ question }: { question: Question }) {
+  return (
+    <div className="answer-reveal">
+      <strong>Answer: {JSON.stringify(question.answer)}</strong>
+      {question.explanation && <span>{question.explanation}</span>}
+    </div>
   );
 }
 
