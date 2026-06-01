@@ -451,7 +451,12 @@ export default function App() {
     }
     const expected = currentQuestion.answer;
     const ok = JSON.stringify(value) === JSON.stringify(expected);
-    setQuestionResults({ ...questionResults, [currentQuestion.id]: ok ? "correct" : "incorrect" });
+    setQuestionResults((results) => ({ ...results, [currentQuestion.id]: ok ? "correct" : "incorrect" }));
+    if (activeFeedbackMode === "instant" && ok && questionIndex < activeQuestions.length - 1) {
+      setFeedback("");
+      setQuestionIndex((index) => Math.min(index + 1, activeQuestions.length - 1));
+      return;
+    }
     setFeedback(ok ? "Correct." : `Submitted. Expected answer: ${JSON.stringify(expected)}`);
   }
 
