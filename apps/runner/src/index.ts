@@ -325,9 +325,10 @@ record JudgeResultDto(string status, string stdout, string stderr, IEnumerable<T
     "utf8"
   );
   const command = requiredRuntime("csharp");
+  const csharpBuildTimeoutMs = Math.max(commandTimeoutMs * 6, 90000);
   const build = await run(command[0], [...command.slice(1), "build", "--nologo", "--property:UseSharedCompilation=false", workdir], {
     cwd: workdir,
-    timeoutMs: commandTimeoutMs * 2
+    timeoutMs: csharpBuildTimeoutMs
   });
   if (build.status !== "accepted") return { ...build, status: "compile_error", durationMs: Date.now() - started, testcaseResults: [] };
   return normalizeHarnessResult(
@@ -482,10 +483,16 @@ interface ProcessOutput {
 
 function run(command: string, args: string[], options: { cwd?: string; timeoutMs?: number } = {}): Promise<ProcessOutput> {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd: options.cwd, env: childEnv(), stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: childEnv(),
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      detached: process.platform !== "win32"
+    });
     let stdout = "";
     let stderr = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), options.timeoutMs || commandTimeoutMs);
+    const timer = setTimeout(() => killProcessTree(child.pid), options.timeoutMs || commandTimeoutMs);
     child.stdout.on("data", (chunk) => {
       stdout = (stdout + chunk).slice(0, maxBytes);
     });
@@ -505,6 +512,23 @@ function run(command: string, args: string[], options: { cwd?: string; timeoutMs
       });
     });
   });
+}
+
+function killProcessTree(pid: number | undefined) {
+  if (!pid) return;
+  try {
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { windowsHide: true });
+    } else {
+      process.kill(-pid, "SIGKILL");
+    }
+  } catch {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // The process may have exited between the timeout and the kill attempt.
+    }
+  }
 }
 
 function requiredRuntime(language: Language) {

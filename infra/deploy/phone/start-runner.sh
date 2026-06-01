@@ -13,8 +13,19 @@ if command -v systemctl >/dev/null 2>&1 && systemctl is-system-running >/dev/nul
   sudo systemctl enable ace-coding-runner
   sudo systemctl restart ace-coding-runner
 else
-  pkill -f "$APP_DIR/apps/runner/dist/index.js" 2>/dev/null || true
-  pkill -f "$APP_DIR/apps/runner.*npm start" 2>/dev/null || true
+  for pid in $(pgrep -f "node dist/index.js|npm start" 2>/dev/null || true); do
+    cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"
+    if [ "$cwd" = "$APP_DIR/apps/runner" ]; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+  sleep 1
+  for pid in $(pgrep -f "node dist/index.js|npm start" 2>/dev/null || true); do
+    cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"
+    if [ "$cwd" = "$APP_DIR/apps/runner" ]; then
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  done
   cd "$APP_DIR/apps/runner"
   if [ -f /etc/ace-coding/runner.env ]; then
     set -a
