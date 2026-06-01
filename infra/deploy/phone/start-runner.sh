@@ -10,7 +10,8 @@ cd "$APP_DIR"
 if command -v systemctl >/dev/null 2>&1 && systemctl list-units >/dev/null 2>&1; then
   sudo cp infra/deploy/phone/systemd/ace-coding-runner.service /etc/systemd/system/
   sudo systemctl daemon-reload
-  sudo systemctl enable --now ace-coding-runner
+  sudo systemctl enable ace-coding-runner
+  sudo systemctl restart ace-coding-runner
 else
   pkill -f "$APP_DIR/apps/runner/dist/index.js" 2>/dev/null || true
   cd "$APP_DIR/apps/runner"

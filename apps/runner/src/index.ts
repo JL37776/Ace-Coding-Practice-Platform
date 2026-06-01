@@ -238,7 +238,73 @@ async function judgeSql(job: JudgeJob, workdir: string, started: number): Promis
 }
 
 async function judgeCSharp(job: JudgeJob, workdir: string, started: number): Promise<JudgeResult> {
-  await writeFile(join(workdir, "Program.cs"), job.submission.sourceCode, "utf8");
+  await writeFile(join(workdir, "Solution.cs"), job.submission.sourceCode, "utf8");
+  await writeFile(
+    join(workdir, "Program.cs"),
+    `using System;
+using System.Linq;
+using System.Reflection;
+using System.Text.Json;
+
+var payload = JsonSerializer.Deserialize<Payload>(${JSON.stringify(JSON.stringify(toHarnessPayload(job)))})!;
+var solutionType = Type.GetType("Solution") ?? Assembly.GetExecutingAssembly().GetTypes().FirstOrDefault(type => type.Name == "Solution");
+if (solutionType is null)
+{
+  Console.WriteLine(JsonSerializer.Serialize(new JudgeResultDto("runtime_error", "", "missing class Solution", Array.Empty<TestResultDto>())));
+  return;
+}
+var method = solutionType.GetMethod(payload.entrypoint, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+if (method is null)
+{
+  Console.WriteLine(JsonSerializer.Serialize(new JudgeResultDto("runtime_error", "", "missing method " + payload.entrypoint, Array.Empty<TestResultDto>())));
+  return;
+}
+var instance = method.IsStatic ? null : Activator.CreateInstance(solutionType);
+var parameters = method.GetParameters();
+var overall = "accepted";
+var results = new List<TestResultDto>();
+foreach (var testCase in payload.testCases)
+{
+  var status = "accepted";
+  var stderr = "";
+  try
+  {
+    var args = parameters.Select(parameter =>
+    {
+      if (!testCase.inputJson.TryGetProperty(parameter.Name!, out var value)) throw new Exception("missing argument " + parameter.Name);
+      return value.Deserialize(parameter.ParameterType, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    }).ToArray();
+    var actual = method.Invoke(instance, args);
+    var actualJson = JsonSerializer.Serialize(actual);
+    var expectedJson = testCase.expectedJson.GetRawText();
+    if (actualJson != expectedJson)
+    {
+      status = "wrong_answer";
+      stderr = "expected " + expectedJson + ", got " + actualJson;
+    }
+  }
+  catch (TargetInvocationException error)
+  {
+    status = "runtime_error";
+    stderr = error.InnerException?.ToString() ?? error.ToString();
+  }
+  catch (Exception error)
+  {
+    status = "runtime_error";
+    stderr = error.ToString();
+  }
+  if (overall == "accepted" && status != "accepted") overall = status;
+  results.Add(new TestResultDto(testCase.id, status, stderr.Length > 1000 ? stderr[..1000] : stderr, 0));
+}
+Console.WriteLine(JsonSerializer.Serialize(new JudgeResultDto(overall, "", "", results)));
+
+record Payload(string entrypoint, int timeLimitMs, TestCaseDto[] testCases);
+record TestCaseDto(string id, JsonElement inputJson, JsonElement expectedJson);
+record TestResultDto(string testcaseId, string status, string stderr, int durationMs);
+record JudgeResultDto(string status, string stdout, string stderr, IEnumerable<TestResultDto> testcaseResults);
+`,
+    "utf8"
+  );
   await writeFile(
     join(workdir, "AceSubmission.csproj"),
     `<Project Sdk="Microsoft.NET.Sdk">
@@ -253,31 +319,31 @@ async function judgeCSharp(job: JudgeJob, workdir: string, started: number): Pro
     "utf8"
   );
   const command = requiredRuntime("csharp");
-  const output = await run(command[0], [...command.slice(1), "run", "--project", workdir], { cwd: workdir, timeoutMs: commandTimeoutMs * 2 });
-  return simpleProcessResult(output, job.testCases, started);
+  const build = await run(command[0], [...command.slice(1), "build", "--nologo", "--property:UseSharedCompilation=false", workdir], {
+    cwd: workdir,
+    timeoutMs: commandTimeoutMs * 2
+  });
+  if (build.status !== "accepted") return { ...build, status: "compile_error", durationMs: Date.now() - started, testcaseResults: [] };
+  return normalizeHarnessResult(
+    await run(command[0], [...command.slice(1), "run", "--no-build", "--no-restore", "--project", workdir], { cwd: workdir }),
+    started
+  );
 }
 
 async function judgeJava(job: JudgeJob, workdir: string, started: number): Promise<JudgeResult> {
-  await writeFile(join(workdir, "Main.java"), job.submission.sourceCode, "utf8");
+  await writeFile(join(workdir, "Solution.java"), job.submission.sourceCode, "utf8");
+  const payload = toHarnessPayload(job);
+  await writeFile(join(workdir, "Main.java"), javaHarnessSource(payload), "utf8");
   const command = requiredRuntime("java");
-  const compile = await run(command[0], [...command.slice(1), "Main.java"], { cwd: workdir });
-  if (compile.status !== "accepted") return simpleProcessResult({ ...compile, status: "compile_error" }, job.testCases, started);
-  return simpleProcessResult(await run("java", ["Main"], { cwd: workdir }), job.testCases, started);
+  const compile = await run(command[0], [...command.slice(1), "Solution.java", "Main.java"], { cwd: workdir });
+  if (compile.status !== "accepted") return { ...compile, status: "compile_error", durationMs: Date.now() - started, testcaseResults: [] };
+  return normalizeHarnessResult(await run("java", ["Main"], { cwd: workdir }), started);
 }
 
 function normalizeHarnessResult(output: ProcessOutput, started: number): JudgeResult {
   if (output.status !== "accepted") return { ...output, durationMs: Date.now() - started, testcaseResults: [] };
   try {
-    const stdoutLines = output.stdout.trim().split(/\r?\n/);
-    let jsonLine = "";
-    for (let index = stdoutLines.length - 1; index >= 0; index -= 1) {
-      const line = stdoutLines[index].trim();
-      if (line.startsWith("{")) {
-        jsonLine = line;
-        break;
-      }
-    }
-    const parsed = JSON.parse(jsonLine || output.stdout) as JudgeResult;
+    const parsed = JSON.parse(extractLastJsonObject(output.stdout)) as JudgeResult;
     return {
       status: parsed.status,
       stdout: parsed.stdout || "",
@@ -288,6 +354,96 @@ function normalizeHarnessResult(output: ProcessOutput, started: number): JudgeRe
   } catch {
     return { status: "system_error", stdout: output.stdout, stderr: "Runner returned invalid JSON", durationMs: Date.now() - started, testcaseResults: [] };
   }
+}
+
+function extractLastJsonObject(stdout: string) {
+  const trimmed = stdout.trim();
+  const lastClose = trimmed.lastIndexOf("}");
+  if (lastClose === -1) return trimmed;
+  for (let index = lastClose; index >= 0; index -= 1) {
+    if (trimmed[index] !== "{") continue;
+    const candidate = trimmed.slice(index, lastClose + 1);
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      // Keep searching for the start of the last complete JSON object.
+    }
+  }
+  return trimmed;
+}
+
+function javaHarnessSource(payload: ReturnType<typeof toHarnessPayload>) {
+  const cases = payload.testCases.map((testCase) => {
+    const input = testCase.inputJson as Record<string, unknown>;
+    const args = Object.values(input).map(javaLiteral).join(", ");
+    return `runCase(${JSON.stringify(testCase.id)}, () -> solution.${payload.entrypoint}(${args}), ${javaLiteral(testCase.expectedJson)});`;
+  }).join("\n      ");
+
+  return `import java.util.*;
+import java.util.function.*;
+
+public class Main {
+  static Solution solution = new Solution();
+  static String overall = "accepted";
+  static List<String> results = new ArrayList<>();
+
+  public static void main(String[] args) {
+    try {
+      ${cases}
+      System.out.println("{\\"status\\":\\"" + overall + "\\",\\"stdout\\":\\"\\",\\"stderr\\":\\"\\",\\"testcaseResults\\":[" + String.join(",", results) + "]}");
+    } catch (Throwable error) {
+      String stderr = escape(error.toString());
+      System.out.println("{\\"status\\":\\"runtime_error\\",\\"stdout\\":\\"\\",\\"stderr\\":\\"" + stderr + "\\",\\"testcaseResults\\":[]}");
+    }
+  }
+
+  static void runCase(String id, Supplier<Object> call, Object expected) {
+    String status = "accepted";
+    String stderr = "";
+    try {
+      Object actual = call.get();
+      if (!deepEquals(actual, expected)) {
+        status = "wrong_answer";
+        stderr = "expected " + display(expected) + ", got " + display(actual);
+      }
+    } catch (Throwable error) {
+      status = "runtime_error";
+      stderr = error.toString();
+    }
+    if (overall.equals("accepted") && !status.equals("accepted")) overall = status;
+    results.add("{\\"testcaseId\\":\\"" + escape(id) + "\\",\\"status\\":\\"" + status + "\\",\\"stderr\\":\\"" + escape(stderr) + "\\",\\"durationMs\\":0}");
+  }
+
+  static boolean deepEquals(Object actual, Object expected) {
+    if (actual instanceof int[] a && expected instanceof int[] e) return Arrays.equals(a, e);
+    if (actual instanceof long[] a && expected instanceof long[] e) return Arrays.equals(a, e);
+    if (actual instanceof String[] a && expected instanceof String[] e) return Arrays.equals(a, e);
+    return Objects.equals(actual, expected);
+  }
+
+  static String display(Object value) {
+    if (value instanceof int[] items) return Arrays.toString(items);
+    if (value instanceof long[] items) return Arrays.toString(items);
+    if (value instanceof String[] items) return Arrays.toString(items);
+    return String.valueOf(value);
+  }
+
+  static String escape(String value) {
+    return value.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\"").replace("\\n", "\\\\n").replace("\\r", "\\\\r");
+  }
+}
+`;
+}
+
+function javaLiteral(value: unknown): string {
+  if (Array.isArray(value)) {
+    if (value.every((item) => Number.isInteger(item))) return `new int[] { ${value.join(", ")} }`;
+    if (value.every((item) => typeof item === "string")) return `new String[] { ${value.map((item) => JSON.stringify(item)).join(", ")} }`;
+  }
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  throw new Error(`Unsupported Java testcase value: ${JSON.stringify(value)}`);
 }
 
 function simpleProcessResult(output: ProcessOutput, testCases: TestCase[], started: number): JudgeResult {

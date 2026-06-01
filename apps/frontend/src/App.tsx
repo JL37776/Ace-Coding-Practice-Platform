@@ -16,8 +16,10 @@ const starterCode = {
   javascript:
     "function twoSum(nums, target) {\n  const seen = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const need = target - nums[i];\n    if (seen.has(need)) return [seen.get(need), i];\n    seen.set(nums[i], i);\n  }\n}",
   sql: "-- SQL runner will be enabled later.\nselect 1;",
-  csharp: "using System;\n\nConsole.WriteLine(\"C# runner is available\");",
-  java: "public class Main {\n  public static void main(String[] args) {\n    System.out.println(\"Java runner is available\");\n  }\n}"
+  csharp:
+    "public class Solution\n{\n    public int[] TwoSum(int[] nums, int target)\n    {\n        var seen = new Dictionary<int, int>();\n        for (var i = 0; i < nums.Length; i++)\n        {\n            var need = target - nums[i];\n            if (seen.TryGetValue(need, out var index)) return new[] { index, i };\n            seen[nums[i]] = i;\n        }\n        return Array.Empty<int>();\n    }\n}",
+  java:
+    "import java.util.*;\n\npublic class Solution {\n  public int[] twoSum(int[] nums, int target) {\n    Map<Integer, Integer> seen = new HashMap<>();\n    for (int i = 0; i < nums.length; i++) {\n      int need = target - nums[i];\n      if (seen.containsKey(need)) return new int[] { seen.get(need), i };\n      seen.put(nums[i], i);\n    }\n    return new int[0];\n  }\n}"
 } satisfies Record<Language, string>;
 
 const languages: Language[] = ["python", "typescript", "javascript", "csharp", "java"];

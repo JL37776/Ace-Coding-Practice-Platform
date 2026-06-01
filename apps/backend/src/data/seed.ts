@@ -135,12 +135,16 @@ export const problems: Problem[] = [
       entrypoint: {
         python: "two_sum",
         typescript: "twoSum",
-        javascript: "twoSum"
+        javascript: "twoSum",
+        csharp: "TwoSum",
+        java: "twoSum"
       },
       signature: {
         python: "def two_sum(nums, target):",
         typescript: "function twoSum(nums: number[], target: number): number[]",
-        javascript: "function twoSum(nums, target) {}"
+        javascript: "function twoSum(nums, target) {}",
+        csharp: "public int[] TwoSum(int[] nums, int target)",
+        java: "public int[] twoSum(int[] nums, int target)"
       },
       checker: "exact",
       timeLimitMs: 5000,
