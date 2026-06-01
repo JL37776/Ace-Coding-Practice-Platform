@@ -794,7 +794,7 @@ p {
 
 .practice-card {
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto 1fr auto;
   align-content: start;
   padding: 32px;
   border-radius: 12px;
@@ -814,7 +814,8 @@ p {
 .choice-list {
   display: grid;
   gap: 14px;
-  margin-top: 16px;
+  margin-top: 20px;
+  margin-bottom: auto;
 }
 
 .choice-list button {
