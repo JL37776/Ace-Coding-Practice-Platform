@@ -10,6 +10,7 @@
 
 body {
   margin: 0;
+  min-width: 100%;
 }
 
 button,
@@ -98,9 +99,11 @@ select {
 }
 
 .app-shell {
+  width: 100vw;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 360px 8px minmax(0, 1fr);
+  overflow-x: hidden;
 }
 
 .sidebar {
@@ -340,7 +343,7 @@ p {
 }
 
 .topic-row {
-  grid-template-columns: 34px 1fr auto;
+  grid-template-columns: 34px minmax(0, 1fr);
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -392,29 +395,6 @@ p {
   white-space: nowrap;
 }
 
-.topic-delete {
-  width: 24px;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-left: 0;
-  color: #94a3b8;
-  font-size: 14px;
-  opacity: 0;
-  transition: all 0.15s ease;
-  cursor: pointer;
-}
-
-.topic-row:hover .topic-delete {
-  opacity: 1;
-}
-
-.topic-delete:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-}
-
 .topic-main span,
 .topic span {
   color: #64748b;
@@ -432,7 +412,7 @@ p {
 }
 
 .suite-row {
-  display: flex;
+  display: block;
   gap: 0;
   margin-top: 3px;
   margin-left: calc((var(--depth, 0) + 1) * 8px + 18px);
@@ -462,39 +442,6 @@ p {
   white-space: nowrap;
 }
 
-.suite-row .suite-tree-item {
-  border-radius: 8px 0 0 8px;
-  margin-top: 0;
-  border-right: 0;
-}
-
-.suite-delete {
-  width: 24px;
-  min-width: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-  border-left: 0;
-  border-radius: 0 8px 8px 0;
-  background: transparent;
-  color: #94a3b8;
-  font-size: 14px;
-  font-weight: 300;
-  transition: all 0.15s ease;
-  cursor: pointer;
-  opacity: 0;
-}
-
-.suite-row:hover .suite-delete {
-  opacity: 1;
-}
-
-.suite-delete:hover {
-  color: #ef4444;
-  background: #fee2e2;
-}
-
 .suite-tree-item.active {
   border-color: #bfdbfe;
   background: #eff6ff;
@@ -518,6 +465,8 @@ p {
 }
 
 .workspace {
+  min-width: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -675,6 +624,7 @@ p {
 }
 
 .practice-fullscreen {
+  width: 100vw;
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto auto 1fr;
@@ -758,6 +708,7 @@ p {
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 28px;
   padding: 28px 32px;
+  width: 100%;
   height: calc(100vh - 180px);
   overflow-y: hidden;
 }

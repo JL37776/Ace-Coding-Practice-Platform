@@ -834,7 +834,6 @@ function TopicNodeView(props: {
           <strong>{props.topic.name}</strong>
           <span>{props.topic.total ? `${props.topic.scorePercent}% (${props.topic.done}/${props.topic.total})` : `${nestedSuiteCount} suites`}</span>
         </button>
-        {props.onDeleteTopic && <button className="icon-button topic-delete" onClick={() => props.onDeleteTopic?.(props.topic.id)} title="Delete topic" aria-label="Delete topic">x</button>}
       </div>
       {open && (
         <div className="child-topic">
@@ -863,7 +862,6 @@ function TopicNodeView(props: {
                 <span>{suite.scorePercent}% ({suite.done}/{suite.total})</span>
                 <small>{suite.questionCount} questions | {suite.allowedTypes.join(", ")}</small>
               </button>
-              {props.onDeleteSuite && <button className="icon-button suite-delete" onClick={() => props.onDeleteSuite?.(suite.id)} title="Delete suite" aria-label="Delete suite">x</button>}
             </div>
           ))}
           {!topicSuites.length && <button className="suite-tree-item add-suite-row" onClick={() => props.onSelectTopic(props.scope, props.topic.id)}>+ Add suite</button>}
