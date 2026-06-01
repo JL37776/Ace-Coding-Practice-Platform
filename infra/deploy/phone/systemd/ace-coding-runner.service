@@ -1,5 +1,5 @@
 [Unit]
-Description=Ace Coding Practice Phone Runner
+Description=Ace Coding Practice Server Runner
 After=network.target ace-coding-backend.service
 
 [Service]

@@ -111,15 +111,15 @@ Implemented now:
 - Python practice loop
 - JavaScript practice loop
 - TypeScript practice loop
-- remote phone runner queue
+- remote server runner queue
 - in-memory problems/submissions
 - exact-output testcase checking
 - Docker runner provider
 - Azure VM friendly Docker Compose deployment
 
-## Phone Runner
+## Server Runner
 
-The phone runner is for an Android Ubuntu environment where Docker is not available. It runs as a service, polls the backend queue, executes jobs for runtimes that exist on the phone, and posts results back.
+The server runner is for the Ubuntu server environment where Docker is not available. It runs as a service, polls the backend queue, executes jobs for runtimes that exist on the server, and posts results back.
 
 Backend config:
 
@@ -137,7 +137,7 @@ RUNNER_POLL_MS=1200
 RUNNER_TIMEOUT_MS=6000
 ```
 
-Start on the phone:
+Start on the server:
 
 ```bash
 npm install
@@ -156,7 +156,7 @@ csharp      requires dotnet SDK
 java        requires javac and java
 ```
 
-Isolation on the phone runner is process-level only: per-job temp directories, timeout, output truncation, and no long-lived user files. This is acceptable for your own practice device, but not enough for hostile public submissions. For stronger isolation later, move runners to Docker/gVisor/Firecracker on a real Linux host.
+Isolation on the server runner is process-level only: per-job temp directories, timeout, output truncation, and no long-lived user files. This is acceptable for controlled practice workloads, but not enough for hostile public submissions. For stronger isolation later, move runners to Docker/gVisor/Firecracker on a dedicated Linux host.
 
 Next natural steps:
 

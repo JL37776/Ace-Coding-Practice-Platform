@@ -29,7 +29,7 @@ const languageCommands: Record<Language, string[]> = {
 
 const supportedLanguages = await detectSupportedLanguages();
 if (supportedLanguages.length === 0) {
-  throw new Error("No supported runtimes found. Install at least python3 or node on the phone.");
+  throw new Error("No supported runtimes found. Install at least python3 or node on the runner server.");
 }
 
 console.log(`ace-runner online: ${supportedLanguages.join(", ")}`);
