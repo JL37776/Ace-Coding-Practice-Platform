@@ -172,7 +172,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     void refreshWorkspace();
-  }, [user, activeTopicId, scope]);
+  }, [user]);
 
   useEffect(() => {
     if (!submissions.some((submission) => submission.status === "queued" || submission.status === "running")) return;
@@ -223,8 +223,16 @@ export default function App() {
     setSubmissions(submissionList);
     if (selection?.scope) setScope(selection.scope);
     if (selectedTopicId) setActiveTopicId(selectedTopicId);
-    setActiveSuiteId(scopedSuites.some((suite) => suite.id === selectedSuiteId) ? selectedSuiteId : scopedSuites[0]?.id || "");
-    setQuestionIndex(0);
+    const nextSuiteId =
+      selection?.suiteId === ""
+        ? ""
+        : scopedSuites.some((suite) => suite.id === selectedSuiteId)
+          ? selectedSuiteId
+          : scopedSuites[0]?.id || "";
+    setActiveSuiteId(nextSuiteId);
+    if (selectedSuiteId !== activeSuiteId || selection?.suiteId !== undefined) {
+      setQuestionIndex(0);
+    }
   }
 
   async function refreshSubmissions() {
@@ -423,14 +431,14 @@ export default function App() {
   function selectTopic(targetScope: BankScope, id: string) {
     setScope(targetScope);
     setActiveTopicId(id);
+    setActiveSuiteId("");
     setMode("config");
   }
 
   function selectFolder(targetScope: BankScope, topic: TopicNode) {
-    const firstSuite = getTopicSuiteItems(topic, suites.filter((suite) => suite.scope === targetScope))[0];
     setScope(targetScope);
-    setActiveTopicId(firstSuite?.topicId || topic.id);
-    setActiveSuiteId(firstSuite?.id || "");
+    setActiveTopicId(topic.id);
+    setActiveSuiteId("");
     setOpenTopics({ ...openTopics, [topic.id]: true });
     setMode("config");
   }
