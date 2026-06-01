@@ -339,7 +339,12 @@ export default function App() {
     if (!confirm("Delete this topic and all its suites? This cannot be undone.")) return;
     try {
       await api.deleteTopic(topicId);
-      await refreshWorkspace({ scope, topicId: activeTopicId, suiteId: activeSuiteId });
+      const deletedActiveTopic = collectTopicIds(topics, topicId).has(activeTopicId);
+      await refreshWorkspace({
+        scope,
+        topicId: deletedActiveTopic ? "" : activeTopicId,
+        suiteId: deletedActiveTopic ? "" : activeSuiteId
+      });
     } catch (error) {
       alert("Failed to delete topic: " + (error instanceof Error ? error.message : "Unknown error"));
     }
@@ -665,7 +670,9 @@ export default function App() {
           <EmptySuiteState
             scope={scope}
             canAdd={scope === "personal" || user.role === "admin"}
+            canDelete={Boolean(activeTopicId) && (scope === "personal" || user.role === "admin")}
             onAddSuite={() => void addSuite(scope)}
+            onDeleteTopic={() => activeTopicId && void deleteTopic(activeTopicId)}
             suiteTitle={newSuiteTitle[scope]}
             onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, [scope]: value })}
           />
@@ -1044,15 +1051,20 @@ function PracticePanel(props: {
 function EmptySuiteState(props: {
   scope: BankScope;
   canAdd: boolean;
+  canDelete: boolean;
   suiteTitle: string;
   onSuiteTitle: (value: string) => void;
   onAddSuite: () => void;
+  onDeleteTopic: () => void;
 }) {
   return (
     <section className="panel empty-suite-panel">
       <p className="eyebrow">{props.scope} bank</p>
       <h2>No suite selected</h2>
       <p>Topic is only a folder. Add a suite under it, then configure Paste Topic Raw, time, AI generation, and practice.</p>
+      <div className="folder-actions">
+        <button className="secondary danger-button" onClick={props.onDeleteTopic} disabled={!props.canDelete}>Delete Topic</button>
+      </div>
       {props.canAdd ? (
         <div className="inline-add-suite">
           <input placeholder="New suite title" value={props.suiteTitle} onChange={(event) => props.onSuiteTitle(event.target.value)} />
