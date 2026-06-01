@@ -480,7 +480,8 @@ p {
 }
 
 .workspace {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 18px;
   padding: 24px;
 }
