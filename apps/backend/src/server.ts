@@ -1,8 +1,11 @@
 import cors from "cors";
 import express from "express";
 import { ZodError } from "zod";
+import { initAuthStore } from "./auth-store.js";
 import { config } from "./config.js";
 import { createApiRouter } from "./routes.js";
+
+await initAuthStore();
 
 const app = express();
 

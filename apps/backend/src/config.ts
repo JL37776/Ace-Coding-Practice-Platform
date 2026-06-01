@@ -3,6 +3,13 @@ export const config = {
   frontendOrigin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
   judgeProvider: process.env.JUDGE_PROVIDER || "mock",
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "http://127.0.0.1:3000",
+  mysql: {
+    host: process.env.MYSQL_HOST || "127.0.0.1",
+    port: Number(process.env.MYSQL_PORT || 3306),
+    database: process.env.MYSQL_DATABASE || "ace_coding",
+    user: process.env.MYSQL_USER || "ace_coding",
+    password: process.env.MYSQL_PASSWORD || ""
+  },
   docker: {
     images: {
       python: process.env.DOCKER_JUDGE_IMAGE_PYTHON || "ace-judge-python:3.12",

@@ -1,26 +1,11 @@
 import type { BankScope, Language, Question, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
-import { problems, questions, suites, systemSettings, testCases, topics, users } from "./data/seed.js";
+import { problems, questions, suites, systemSettings, testCases, topics } from "./data/seed.js";
 
 const submissions = new Map<string, Submission>();
-const sessions = new Map<string, User>();
-const registeredUsers = new Map(users.map((user) => [user.username, user]));
 
 export const store = {
   getSystemSettings() {
     return systemSettings;
-  },
-  createSession(token: string, user: User) {
-    sessions.set(token, user);
-  },
-  getSession(token: string) {
-    return sessions.get(token);
-  },
-  findUser(username: string) {
-    return registeredUsers.get(username);
-  },
-  createUser(user: User & { password: string }) {
-    registeredUsers.set(user.username, user);
-    return user;
   },
   listProblems(user?: User) {
     return problems.filter((problem) => problem.published && canReadScoped(problem, user));

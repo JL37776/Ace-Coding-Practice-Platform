@@ -31,8 +31,8 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authForm, setAuthForm] = useState({
-    username: "admin@ace.local",
-    password: "AceAdmin-2026!",
+    username: "",
+    password: "",
     displayName: "New Learner"
   });
   const [authError, setAuthError] = useState("");
@@ -146,9 +146,8 @@ export default function App() {
             {authMode === "login" ? "Need a personal account?" : "Already have an account?"}
           </button>
           <div className="credential-card">
-            <strong>Default accounts</strong>
-            <span>Admin: admin@ace.local / AceAdmin-2026!</span>
-            <span>Member: demo@ace.local / AceDemo-2026!</span>
+            <strong>Accounts</strong>
+            <span>Use your registered account. Admin credentials are not shown on public pages.</span>
           </div>
         </section>
       </main>

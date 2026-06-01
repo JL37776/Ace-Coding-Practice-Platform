@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import type { JudgeResult, Question, Submission, TrainingSuite, User } from "@ace/shared";
+import * as authStore from "./auth-store.js";
 import { createJudgeProvider } from "./judge/index.js";
 import { store } from "./store.js";
 
@@ -92,39 +93,31 @@ export function createApiRouter() {
     res.json({ data: { ok: true, service: "ace-backend" } });
   });
 
-  router.post("/auth/login", (req, res, next) => {
+  router.post("/auth/login", async (req, res, next) => {
     try {
       const payload = loginSchema.parse(req.body);
-      const user = store.findUser(payload.username);
-      if (!user || user.password !== payload.password) {
+      const session = await authStore.login(payload.username, payload.password);
+      if (!session) {
         return res.status(401).json({ error: "Invalid username or password" });
       }
-      const { password: _password, ...safeUser } = user;
-      const token = randomUUID();
-      store.createSession(token, safeUser);
-      res.json({ data: { token, user: safeUser } });
+      res.json({ data: session });
     } catch (error) {
       next(error);
     }
   });
 
-  router.post("/auth/register", (req, res, next) => {
+  router.post("/auth/register", async (req, res, next) => {
     try {
       const payload = registerSchema.parse(req.body);
-      if (store.findUser(payload.username)) {
+      if (await authStore.findUserByUsername(payload.username)) {
         return res.status(409).json({ error: "User already exists" });
       }
-      const user = store.createUser({
-        id: randomUUID(),
+      const session = await authStore.register({
         username: payload.username,
         password: payload.password,
-        displayName: payload.displayName,
-        role: "member"
+        displayName: payload.displayName
       });
-      const { password: _password, ...safeUser } = user;
-      const token = randomUUID();
-      store.createSession(token, safeUser);
-      res.status(201).json({ data: { token, user: safeUser } });
+      res.status(201).json({ data: session });
     } catch (error) {
       next(error);
     }
@@ -317,9 +310,9 @@ declare global {
   }
 }
 
-function requireUser(req: Request, res: Response, next: NextFunction) {
+async function requireUser(req: Request, res: Response, next: NextFunction) {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
-  const user = token ? store.getSession(token) : undefined;
+  const user = token ? await authStore.getSession(token) : undefined;
   if (!user) return res.status(401).json({ error: "Login required" });
   req.user = user;
   next();
