@@ -19,6 +19,17 @@ export const store = {
   listTopics(user: User) {
     return filterTopicTree(topics, user);
   },
+  createTopic(topic: TopicNode) {
+    if (topic.parentId) {
+      const parent = findTopic(topics, topic.parentId);
+      if (parent) {
+        parent.children = [...(parent.children || []), topic];
+        return topic;
+      }
+    }
+    topics.push(topic);
+    return topic;
+  },
   listSuites(user: User, topicId?: string, scope?: BankScope) {
     const readable = suites.filter((suite) => canReadScoped(suite, user) && (!scope || suite.scope === scope));
     if (!topicId) return readable;
@@ -95,4 +106,13 @@ function collectChildTopicIds(topicId: string): string[] {
   };
   visit(topics);
   return result;
+}
+
+function findTopic(nodes: TopicNode[], id: string): TopicNode | undefined {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const child = node.children ? findTopic(node.children, id) : undefined;
+    if (child) return child;
+  }
+  return undefined;
 }

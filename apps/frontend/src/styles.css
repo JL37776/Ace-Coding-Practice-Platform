@@ -179,6 +179,55 @@ p {
   gap: 8px;
 }
 
+.bank-section,
+.quick-add {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #263449;
+  border-radius: 8px;
+  padding: 12px;
+  background: #111827;
+}
+
+.bank-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bank-heading span,
+.bank-empty {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.quick-add input,
+.form-grid input {
+  width: 100%;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #0f172a;
+  color: white;
+}
+
+.quick-add button {
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #2563eb;
+  color: white;
+  font-weight: 800;
+}
+
+.quick-add button:disabled {
+  border-color: #334155;
+  background: #1e293b;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
 .topic {
   width: 100%;
   display: grid;
@@ -254,10 +303,36 @@ p {
   color: #2563eb;
 }
 
-.content-grid {
+.content-grid,
+.editor-grid {
   display: grid;
   grid-template-columns: minmax(320px, 0.85fr) minmax(420px, 1.15fr);
   gap: 18px;
+}
+
+.editor-grid {
+  grid-template-columns: minmax(360px, 0.9fr) minmax(420px, 1.1fr);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.form-grid label {
+  display: grid;
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.form-grid input {
+  border-color: #dbe4ef;
+  background: #f8fafc;
+  color: #172033;
 }
 
 .type-row {
@@ -309,6 +384,42 @@ p {
   line-height: 1.55;
 }
 
+.raw-editor {
+  width: 100%;
+  min-height: 280px;
+  resize: vertical;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+  color: #172033;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.notice {
+  margin-top: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.raw-preview {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+
 .actions {
   display: flex;
   gap: 10px;
@@ -325,7 +436,8 @@ p {
 
 @media (max-width: 980px) {
   .app-shell,
-  .content-grid {
+  .content-grid,
+  .editor-grid {
     grid-template-columns: 1fr;
   }
 

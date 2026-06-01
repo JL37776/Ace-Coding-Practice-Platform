@@ -46,18 +46,39 @@ export const api = {
   me: () => request<User>("/api/auth/me"),
   settings: () => request<SystemSettings>("/api/settings"),
   listTopics: () => request<TopicNode[]>("/api/topics"),
+  createTopic: (input: { scope: "public" | "personal"; parentId?: string; name: string }) =>
+    request<TopicNode>("/api/topics", { method: "POST", body: JSON.stringify(input) }),
   listSuites: (topicId?: string, scope?: "public" | "personal") => {
     const params = new URLSearchParams();
     if (topicId) params.set("topicId", topicId);
     if (scope) params.set("scope", scope);
     return request<TrainingSuite[]>(`/api/suites${params.size ? `?${params}` : ""}`);
   },
+  createSuite: (input: {
+    scope: "public" | "personal";
+    topicId: string;
+    title: string;
+    description: string;
+    questionCount: number;
+    durationMinutes: number;
+    allowedTypes: Array<"single" | "multiple" | "boolean" | "blank" | "coding">;
+  }) => request<TrainingSuite>("/api/suites", { method: "POST", body: JSON.stringify(input) }),
   listQuestions: (suiteId?: string, scope?: "public" | "personal") => {
     const params = new URLSearchParams();
     if (suiteId) params.set("suiteId", suiteId);
     if (scope) params.set("scope", scope);
     return request<Question[]>(`/api/questions${params.size ? `?${params}` : ""}`);
   },
+  parseTopicRaw: (input: { scope: "public" | "personal"; topicId: string; raw: string }) =>
+    request<{ suite: TrainingSuite; questions: Question[] }>("/api/topic-raw/parse", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  importTopicRaw: (input: { scope: "public" | "personal"; topicId: string; raw: string }) =>
+    request<{ suite: TrainingSuite; questions: Question[] }>("/api/topic-raw/import", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   listProblems: () => request<Problem[]>("/api/problems"),
   getProblem: (id: string) => request<Problem>(`/api/problems/${id}`),
   createSubmission: (input: CreateSubmissionInput) =>

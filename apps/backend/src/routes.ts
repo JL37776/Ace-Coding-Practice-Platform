@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
-import type { JudgeResult, Question, Submission, TrainingSuite, User } from "@ace/shared";
+import type { BankScope, JudgeResult, Question, QuestionType, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
 import * as authStore from "./auth-store.js";
 import { createJudgeProvider } from "./judge/index.js";
 import { store } from "./store.js";
@@ -33,6 +33,12 @@ const createSuiteSchema = z.object({
   allowedTypes: z.array(z.enum(["single", "multiple", "boolean", "blank", "coding"])).min(1)
 });
 
+const createTopicSchema = z.object({
+  scope: z.enum(["public", "personal"]).default("personal"),
+  parentId: z.string().optional(),
+  name: z.string().min(1).max(120)
+});
+
 const createQuestionSchema = z.object({
   scope: z.enum(["public", "personal"]).default("personal"),
   suiteId: z.string().min(1),
@@ -47,6 +53,12 @@ const createQuestionSchema = z.object({
   explanation: z.string().optional(),
   problemId: z.string().optional(),
   metadata: z.record(z.unknown()).default({})
+});
+
+const topicRawSchema = z.object({
+  scope: z.enum(["public", "personal"]).default("personal"),
+  topicId: z.string().min(1),
+  raw: z.string().min(1).max(50000)
 });
 
 const judgeResultSchema = z.object({
@@ -135,6 +147,28 @@ export function createApiRouter() {
     res.json({ data: store.listTopics(_req.user!) });
   });
 
+  router.post("/topics", requireUser, (req, res, next) => {
+    try {
+      const payload = createTopicSchema.parse(req.body);
+      if (payload.scope === "public" && req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can create public topics" });
+      }
+      const topic: TopicNode = {
+        id: randomUUID(),
+        scope: payload.scope,
+        ownerUserId: payload.scope === "personal" ? req.user!.id : undefined,
+        parentId: payload.parentId,
+        name: payload.name,
+        scorePercent: 0,
+        done: 0,
+        total: 0
+      };
+      res.status(201).json({ data: store.createTopic(topic) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/suites", requireUser, (req, res) => {
     const scope = req.query.scope === "public" || req.query.scope === "personal" ? req.query.scope : undefined;
     res.json({ data: store.listSuites(req.user!, typeof req.query.topicId === "string" ? req.query.topicId : undefined, scope) });
@@ -177,6 +211,30 @@ export function createApiRouter() {
         ...payload
       };
       res.status(201).json({ data: store.createQuestion(question) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/topic-raw/parse", requireUser, (req, res, next) => {
+    try {
+      const payload = topicRawSchema.parse(req.body);
+      res.json({ data: parseTopicRaw(payload.raw, payload.scope, payload.topicId, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/topic-raw/import", requireUser, (req, res, next) => {
+    try {
+      const payload = topicRawSchema.parse(req.body);
+      if (payload.scope === "public" && req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can import public question banks" });
+      }
+      const parsed = parseTopicRaw(payload.raw, payload.scope, payload.topicId, req.user!);
+      const suite = store.createSuite(parsed.suite);
+      const importedQuestions = parsed.questions.map((question) => store.createQuestion({ ...question, suiteId: suite.id }));
+      res.status(201).json({ data: { suite, questions: importedQuestions } });
     } catch (error) {
       next(error);
     }
@@ -329,4 +387,79 @@ function isRunnerAuthorized(authorization: string | undefined) {
   const token = process.env.RUNNER_SHARED_TOKEN || "";
   if (!token) return true;
   return authorization === `Bearer ${token}`;
+}
+
+function parseTopicRaw(raw: string, scope: BankScope, topicId: string, user: User) {
+  const blocks = raw
+    .split(/\n(?=@(?:suite|q)\b)/i)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  const suiteBlock = blocks.find((block) => block.toLowerCase().startsWith("@suite"));
+  const questionBlocks = blocks.filter((block) => block.toLowerCase().startsWith("@q"));
+  const suiteFields = parseFields(suiteBlock || "");
+  const questions = questionBlocks.map((block) => questionFromFields(parseFields(block), scope, user));
+  const allowedTypes = Array.from(new Set(questions.map((question) => question.type))) as QuestionType[];
+  const suite: TrainingSuite = {
+    id: randomUUID(),
+    scope,
+    ownerUserId: scope === "personal" ? user.id : undefined,
+    topicId,
+    title: suiteFields.title || "Imported Topic Raw Suite",
+    description: suiteFields.description || "Imported from Paste Topic Raw.",
+    questionCount: questions.length,
+    durationMinutes: Number(suiteFields.duration || 15),
+    scorePercent: 0,
+    done: 0,
+    total: questions.length,
+    allowedTypes: allowedTypes.length ? allowedTypes : ["single"]
+  };
+  return { suite, questions };
+}
+
+function parseFields(block: string) {
+  const fields: Record<string, string> = {};
+  for (const line of block.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("@")) continue;
+    const index = trimmed.indexOf("=");
+    if (index === -1) continue;
+    fields[trimmed.slice(0, index).trim()] = trimmed.slice(index + 1).trim();
+  }
+  return fields;
+}
+
+function questionFromFields(fields: Record<string, string>, scope: BankScope, user: User): Question {
+  const type = normalizeQuestionType(fields.type);
+  const options = ["A", "B", "C", "D", "E", "F"]
+    .filter((id) => fields[id])
+    .map((id) => ({ id, text: fields[id] }));
+  return {
+    id: randomUUID(),
+    scope,
+    ownerUserId: scope === "personal" ? user.id : undefined,
+    suiteId: "",
+    type,
+    title: fields.title || fields.prompt || "Untitled question",
+    description: fields.description || "",
+    difficulty: fields.difficulty === "medium" || fields.difficulty === "hard" ? fields.difficulty : "easy",
+    tags: fields.tags ? fields.tags.split(",").map((tag) => tag.trim()).filter(Boolean) : [],
+    media: [],
+    options: options.length ? options : undefined,
+    answer: parseAnswer(fields.answer || fields.ans, type),
+    explanation: fields.explanation || "",
+    problemId: fields.problemId,
+    metadata: {}
+  };
+}
+
+function normalizeQuestionType(value = "single"): QuestionType {
+  if (value === "multiple" || value === "boolean" || value === "blank" || value === "coding") return value;
+  return "single";
+}
+
+function parseAnswer(value: string | undefined, type: QuestionType) {
+  if (!value) return undefined;
+  if (type === "multiple") return value.split(",").map((item) => item.trim()).filter(Boolean);
+  if (type === "boolean") return value.toLowerCase() === "true";
+  return value;
 }
