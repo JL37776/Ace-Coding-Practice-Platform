@@ -170,6 +170,15 @@ export function createApiRouter() {
     }
   });
 
+  router.delete("/topics/:id", requireUser, (req, res, next) => {
+    try {
+      store.deleteTopic(req.params.id, req.user!);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/suites", requireUser, (req, res) => {
     const scope = req.query.scope === "public" || req.query.scope === "personal" ? req.query.scope : undefined;
     res.json({ data: store.listSuites(req.user!, typeof req.query.topicId === "string" ? req.query.topicId : undefined, scope) });
@@ -190,6 +199,15 @@ export function createApiRouter() {
         total: payload.questionCount
       };
       res.status(201).json({ data: store.createSuite(suite) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/suites/:id", requireUser, (req, res, next) => {
+    try {
+      store.deleteSuite(req.params.id, req.user!);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

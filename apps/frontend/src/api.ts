@@ -48,6 +48,8 @@ export const api = {
   listTopics: () => request<TopicNode[]>("/api/topics"),
   createTopic: (input: { scope: "public" | "personal"; parentId?: string; name: string }) =>
     request<TopicNode>("/api/topics", { method: "POST", body: JSON.stringify(input) }),
+  deleteTopic: (id: string) =>
+    request<void>(`/api/topics/${id}`, { method: "DELETE" }),
   listSuites: (topicId?: string, scope?: "public" | "personal") => {
     const params = new URLSearchParams();
     if (topicId) params.set("topicId", topicId);
@@ -64,6 +66,8 @@ export const api = {
     allowedTypes: Array<"single" | "multiple" | "boolean" | "blank" | "coding">;
     feedbackMode?: "instant" | "final";
   }) => request<TrainingSuite>("/api/suites", { method: "POST", body: JSON.stringify(input) }),
+  deleteSuite: (id: string) =>
+    request<void>(`/api/suites/${id}`, { method: "DELETE" }),
   listQuestions: (suiteId?: string, scope?: "public" | "personal") => {
     const params = new URLSearchParams();
     if (suiteId) params.set("suiteId", suiteId);

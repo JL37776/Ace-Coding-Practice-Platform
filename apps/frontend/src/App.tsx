@@ -224,6 +224,28 @@ export default function App() {
     await refreshWorkspace();
   }
 
+  async function deleteTopic(topicId: string) {
+    if (!confirm("Delete this topic and all its suites? This cannot be undone.")) return;
+    try {
+      await api.deleteTopic(topicId);
+      await refreshWorkspace();
+      setActiveSuiteId("");
+    } catch (error) {
+      alert("Failed to delete topic: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
+  }
+
+  async function deleteSuite(suiteId: string) {
+    if (!confirm("Delete this suite and all its questions? This cannot be undone.")) return;
+    try {
+      await api.deleteSuite(suiteId);
+      await refreshWorkspace();
+      setActiveSuiteId("");
+    } catch (error) {
+      alert("Failed to delete suite: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
+  }
+
   async function parseRaw() {
     if (!activeTopicId) return;
     const parsed = await api.parseTopicRaw({ scope, topicId: activeTopicId, raw: rawText });
@@ -390,6 +412,8 @@ export default function App() {
           onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, public: value })}
           onAddTopic={() => void addTopic("public")}
           onAddSuite={() => void addSuite("public")}
+          onDeleteTopic={deleteTopic}
+          onDeleteSuite={deleteSuite}
         />
         <BankPanel
           title="Personal Question Bank"
@@ -419,6 +443,8 @@ export default function App() {
           onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, personal: value })}
           onAddTopic={() => void addTopic("personal")}
           onAddSuite={() => void addSuite("personal")}
+          onDeleteTopic={deleteTopic}
+          onDeleteSuite={deleteSuite}
         />
       </aside>
       <div className="sidebar-resizer" onMouseDown={startSidebarResize} aria-label="Resize sidebar" />
@@ -483,6 +509,8 @@ function BankPanel(props: {
   onSuiteTitle: (value: string) => void;
   onAddTopic: () => void;
   onAddSuite: () => void;
+  onDeleteTopic?: (id: string) => void;
+  onDeleteSuite?: (id: string) => void;
 }) {
   const disabled = props.scope === "public" && props.user.role !== "admin";
   return (
@@ -508,6 +536,8 @@ function BankPanel(props: {
                 onSelectTopic={props.onSelectTopic}
                 onSelectFolder={props.onSelectFolder}
                 onSelectSuite={props.onSelectSuite}
+                onDeleteTopic={props.onDeleteTopic}
+                onDeleteSuite={props.onDeleteSuite}
               />
             )) : <div className="bank-empty">No topics yet.</div>}
           </div>
@@ -534,6 +564,8 @@ function TopicNodeView(props: {
   onSelectTopic: (scope: BankScope, id: string) => void;
   onSelectFolder: (scope: BankScope, topic: TopicNode) => void;
   onSelectSuite: (id: string) => void;
+  onDeleteTopic?: (id: string) => void;
+  onDeleteSuite?: (id: string) => void;
 }) {
   const open = props.openTopics[props.topic.id] ?? true;
   const topicSuites = getTopicSuiteItems(props.topic, props.suites);
@@ -549,15 +581,19 @@ function TopicNodeView(props: {
           <strong>{props.topic.name}</strong>
           <span>{props.topic.scorePercent}% ({props.topic.done}/{props.topic.total})</span>
         </button>
+        {props.onDeleteTopic && <button className="icon-button topic-delete" onClick={() => props.onDeleteTopic?.(props.topic.id)} title="Delete topic" aria-label="Delete topic">×</button>}
       </div>
       {open && (
         <div className="child-topic">
           {topicSuites.map((suite) => (
-            <button key={suite.id} className={suite.id === props.activeSuiteId ? "suite-tree-item active" : "suite-tree-item"} onClick={() => props.onSelectSuite(suite.id)}>
-              <strong>{suite.title}</strong>
-              <span>{suite.scorePercent}% ({suite.done}/{suite.total})</span>
-              <small>{suite.questionCount} questions | {suite.allowedTypes.join(", ")}</small>
-            </button>
+            <div key={suite.id} className="suite-row">
+              <button className={suite.id === props.activeSuiteId ? "suite-tree-item active" : "suite-tree-item"} onClick={() => props.onSelectSuite(suite.id)}>
+                <strong>{suite.title}</strong>
+                <span>{suite.scorePercent}% ({suite.done}/{suite.total})</span>
+                <small>{suite.questionCount} questions | {suite.allowedTypes.join(", ")}</small>
+              </button>
+              {props.onDeleteSuite && <button className="icon-button suite-delete" onClick={() => props.onDeleteSuite?.(suite.id)} title="Delete suite" aria-label="Delete suite">×</button>}
+            </div>
           ))}
           {!topicSuites.length && <button className="suite-tree-item add-suite-row" onClick={() => props.onSelectTopic(props.scope, props.topic.id)}>+ Add suite</button>}
         </div>
@@ -591,14 +627,14 @@ function SuiteConfig(props: {
           <h2>{props.activeSuite?.title || "Choose or create a suite"}</h2>
           <p>{props.activeSuite?.description || "Paste a whole raw suite, set time, add similar questions, then practice."}</p>
         </div>
-        <button className="practice-button" onClick={props.onPractice} disabled={!props.activeQuestions.length}>Practice</button>
+        <button className="practice-button" onClick={props.onPractice} disabled={!props.activeQuestions.length}>🚀 Practice</button>
       </header>
 
       <section className="editor-grid">
         <section className="panel">
           <div className="panel-heading">
             <div><h3>Create / Edit Test Suite</h3><p>This page configures the suite. Code appears only inside coding questions during practice.</p></div>
-            <button className="secondary">Save</button>
+            <button className="secondary" disabled>💾 Save</button>
           </div>
           <div className="form-grid">
             <label>Suite Name<input value={props.activeSuite?.title || ""} readOnly /></label>
@@ -607,8 +643,8 @@ function SuiteConfig(props: {
             <label>Question Count<input value={`${props.activeSuite?.questionCount || props.activeQuestions.length} questions`} readOnly /></label>
           </div>
           <div className="mode-switch">
-            <button className={props.feedbackMode === "instant" ? "active" : ""} onClick={() => props.onFeedbackMode("instant")}>即时反馈</button>
-            <button className={props.feedbackMode === "final" ? "active" : ""} onClick={() => props.onFeedbackMode("final")}>最后提交显示答案</button>
+            <button className={props.feedbackMode === "instant" ? "active" : ""} onClick={() => props.onFeedbackMode("instant")}>⚡ Instant Feedback</button>
+            <button className={props.feedbackMode === "final" ? "active" : ""} onClick={() => props.onFeedbackMode("final")}>🔒 Show at End</button>
           </div>
           <div className="type-row">{(props.activeSuite?.allowedTypes || ["single", "multiple", "boolean", "blank", "coding"]).map((type) => <span key={type}>{type}</span>)}</div>
           {props.rawParsedQuestions.length > 0 && <RawQuestionSummary questions={props.rawParsedQuestions} />}
@@ -616,7 +652,7 @@ function SuiteConfig(props: {
         </section>
 
         <section className="panel raw-panel">
-          <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI/generated raw content for one full suite. Parse, validate, import.</p></div><button className="secondary">AI Similar Questions</button></div>
+          <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI/generated raw content for one full suite. Parse, validate, import.</p></div><button className="secondary" disabled>✨ AI Similar</button></div>
           <label className="prompt-template-label">
             AI Prompt Template
             <textarea className="prompt-template" value={props.aiPromptTemplate} readOnly />
@@ -667,14 +703,14 @@ function PracticePanel(props: {
     <main className="practice-fullscreen">
       <header className="practice-topbar">
         <div>
-          <p className="eyebrow">Practice</p>
+          <p className="eyebrow">📝 Practice</p>
           <h2>{props.suite?.title || "Practice Suite"}</h2>
         </div>
         <div className="practice-status">
-          <div className="timer-card"><span>Mode</span><strong>{props.feedbackMode === "instant" ? "Instant" : "Final"}</strong></div>
-          <div className="timer-card"><span>Time Left</span><strong>{formatSeconds(props.remainingSeconds)}</strong></div>
+          <div className="timer-card"><span>Mode</span><strong>{props.feedbackMode === "instant" ? "⚡ Instant" : "🔒 Final"}</strong></div>
+          <div className="timer-card" style={{background: props.remainingSeconds < 300 ? "linear-gradient(135deg, #fee2e2, #fecaca)" : undefined, borderColor: props.remainingSeconds < 300 ? "#fca5a5" : undefined}}><span>Time Left</span><strong style={{color: props.remainingSeconds < 300 ? "#991b1b" : "#0f172a"}}>{formatSeconds(props.remainingSeconds)}</strong></div>
           <div className="timer-card"><span>Progress</span><strong>{progress}%</strong></div>
-          <button className="secondary" onClick={props.onBack}>Exit Practice</button>
+          <button className="secondary" onClick={props.onBack}>↩ Exit</button>
         </div>
       </header>
       <div className="practice-progress"><span style={{ width: `${progress}%` }} /></div>
@@ -762,13 +798,13 @@ function AnswerReveal({ question }: { question: Question }) {
 }
 
 function OptionList({ question, value, onAnswer }: { question: Question; value?: string; onAnswer: (id: string, value: unknown) => void }) {
-  return <div className="choice-list">{question.options?.map((option) => <button key={option.id} className={value === option.id ? "selected" : ""} onClick={() => onAnswer(question.id, option.id)}><strong>{option.id}</strong>{option.text}</button>)}</div>;
+  return <div className="choice-list">{question.options?.map((option) => <button key={option.id} className={value === option.id ? "selected" : ""} onClick={() => onAnswer(question.id, option.id)}><span style={{display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "32px", height: "32px", borderRadius: "50%", background: value === option.id ? "#2563eb" : "#e0e7ff", color: value === option.id ? "white" : "#2563eb", fontWeight: "900", fontSize: "14px"}}>{option.id}</span><span>{option.text}</span></button>)}</div>;
 }
 
 function MultiOptionList({ question, value, onAnswer }: { question: Question; value: string[]; onAnswer: (id: string, value: unknown) => void }) {
   return <div className="choice-list">{question.options?.map((option) => {
     const selected = value.includes(option.id);
-    return <button key={option.id} className={selected ? "selected" : ""} onClick={() => onAnswer(question.id, selected ? value.filter((id) => id !== option.id) : [...value, option.id])}><strong>{option.id}</strong>{option.text}</button>;
+    return <button key={option.id} className={selected ? "selected" : ""} onClick={() => onAnswer(question.id, selected ? value.filter((id) => id !== option.id) : [...value, option.id])}><span style={{display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "32px", height: "32px", borderRadius: "8px", background: selected ? "#2563eb" : "#e0e7ff", color: selected ? "white" : "#2563eb", fontWeight: "900", fontSize: "14px"}}>{selected ? "✓" : ""}</span><span>{option.text}</span></button>;
   })}</div>;
 }
 

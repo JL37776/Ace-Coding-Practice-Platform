@@ -52,6 +52,53 @@ export const store = {
     suites.push(suite);
     return suite;
   },
+  deleteTopic(id: string, user: User) {
+    const topic = findTopic(topics, id);
+    if (!topic) throw new Error("Topic not found");
+    if (!canReadScoped(topic, user)) throw new Error("Access denied");
+    
+    // Remove from parent
+    const index = topics.findIndex(t => t.id === id);
+    if (index >= 0) {
+      topics.splice(index, 1);
+    } else {
+      // Find in children
+      const visit = (nodes: TopicNode[]): boolean => {
+        for (let i = 0; i < nodes.length; i++) {
+          if (nodes[i].id === id) {
+            nodes.splice(i, 1);
+            return true;
+          }
+          if (nodes[i].children && visit(nodes[i].children!)) return true;
+        }
+        return false;
+      };
+      visit(topics);
+    }
+
+    // Remove all suites under this topic
+    const childTopicIds = new Set([id, ...collectChildTopicIds(id)]);
+    for (let i = suites.length - 1; i >= 0; i--) {
+      if (childTopicIds.has(suites[i].topicId)) {
+        suites.splice(i, 1);
+      }
+    }
+  },
+  deleteSuite(id: string, user: User) {
+    const suite = suites.find(s => s.id === id);
+    if (!suite) throw new Error("Suite not found");
+    if (!canReadScoped(suite, user)) throw new Error("Access denied");
+    
+    const index = suites.findIndex(s => s.id === id);
+    if (index >= 0) suites.splice(index, 1);
+
+    // Remove all questions in this suite
+    for (let i = questions.length - 1; i >= 0; i--) {
+      if (questions[i].suiteId === id) {
+        questions.splice(i, 1);
+      }
+    }
+  },
   listSubmissions(user: User) {
     return Array.from(submissions.values())
       .filter((submission) => user.role === "admin" || submission.userId === user.id)
