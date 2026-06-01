@@ -9,7 +9,9 @@ WorkingDirectory=/opt/ace-coding/current/apps/runner
 Environment=NODE_ENV=production
 Environment=BACKEND_URL=http://127.0.0.1:3100
 Environment=RUNNER_POLL_MS=1200
-Environment=RUNNER_TIMEOUT_MS=6000
+Environment=RUNNER_TIMEOUT_MS=15000
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+Environment=DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 EnvironmentFile=-/etc/ace-coding/runner.env
 ExecStart=/usr/bin/npm start
 Restart=always

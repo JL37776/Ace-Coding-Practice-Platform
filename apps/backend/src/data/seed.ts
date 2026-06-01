@@ -74,6 +74,52 @@ export const topics: TopicNode[] = [
         total: 50
       }
     ]
+  },
+  {
+    id: "topic-language-framework-tracks",
+    scope: "public",
+    name: "Language & Framework Tracks",
+    scorePercent: 0,
+    done: 0,
+    total: 0,
+    children: [
+      {
+        id: "topic-csharp",
+        scope: "public",
+        parentId: "topic-language-framework-tracks",
+        name: "C# 专栏",
+        scorePercent: 0,
+        done: 0,
+        total: 0
+      },
+      {
+        id: "topic-dotnet",
+        scope: "public",
+        parentId: "topic-language-framework-tracks",
+        name: ".NET 专栏",
+        scorePercent: 0,
+        done: 0,
+        total: 0
+      },
+      {
+        id: "topic-react",
+        scope: "public",
+        parentId: "topic-language-framework-tracks",
+        name: "React 专栏",
+        scorePercent: 0,
+        done: 0,
+        total: 0
+      },
+      {
+        id: "topic-java",
+        scope: "public",
+        parentId: "topic-language-framework-tracks",
+        name: "Java 专栏",
+        scorePercent: 0,
+        done: 0,
+        total: 0
+      }
+    ]
   }
 ];
 
@@ -326,26 +372,17 @@ function loadExpandedQuestionBank() {
     Java: "topic-java"
   };
 
-  ensureInterviewChildTopic("topic-csharp", "C# Interview Practice");
-  ensureInterviewChildTopic("topic-dotnet", ".NET Interview Practice");
-  ensureInterviewChildTopic("topic-react", "React Interview Practice");
-  ensureInterviewChildTopic("topic-java", "Java Interview Practice");
-
   for (const raw of rawSuites) {
     const parsed = parseSeedRawSuite(raw);
     const topicId = Object.entries(topicByPrefix).find(([prefix]) => parsed.suite.title.startsWith(prefix))?.[1] || "topic-interview";
     const suiteId = slugId("suite", parsed.suite.title);
     if (suites.some((suite) => suite.id === suiteId)) continue;
+    parsed.questions = ensureMinimumQuestionCount(parsed.suite.title, parsed.questions, 50);
+    parsed.suite.questionCount = parsed.questions.length;
+    parsed.suite.total = parsed.questions.length;
     suites.push({ ...parsed.suite, id: suiteId, topicId });
     questions.push(...parsed.questions.map((question, index) => ({ ...question, id: `${suiteId}-q${index + 1}`, suiteId })));
   }
-}
-
-function ensureInterviewChildTopic(id: string, name: string) {
-  const interview = topics.find((topic) => topic.id === "topic-interview");
-  if (!interview) return;
-  if (interview.children?.some((topic) => topic.id === id)) return;
-  interview.children = [...(interview.children || []), { id, scope: "public", parentId: interview.id, name, scorePercent: 0, done: 0, total: 0 }];
 }
 
 function parseSeedRawSuite(raw: string) {
@@ -370,6 +407,75 @@ function parseSeedRawSuite(raw: string) {
     feedbackMode: suiteFields.feedbackMode === "final" ? "final" : "instant"
   };
   return { suite, questions: parsedQuestions };
+}
+
+function ensureMinimumQuestionCount(suiteTitle: string, sourceQuestions: Question[], minimum: number) {
+  const expanded = [...sourceQuestions];
+  const profile = suiteProfile(suiteTitle);
+  let index = 1;
+  while (expanded.length < minimum) {
+    expanded.push(makeReinforcementQuestion(profile, index));
+    index += 1;
+  }
+  return expanded;
+}
+
+function suiteProfile(title: string) {
+  if (title.startsWith("C#")) return { tag: "csharp", label: "C#", focus: "language fundamentals, OOP, LINQ, async and runtime behavior" };
+  if (title.startsWith(".NET")) return { tag: "dotnet", label: ".NET", focus: "CLI, ASP.NET Core, dependency injection, EF Core and production APIs" };
+  if (title.startsWith("React")) return { tag: "react", label: "React", focus: "components, hooks, rendering, forms and frontend architecture" };
+  if (title.startsWith("Java")) return { tag: "java", label: "Java", focus: "types, OOP, collections, streams, exceptions and concurrency" };
+  return { tag: "interview", label: "Interview", focus: "core implementation details" };
+}
+
+function makeReinforcementQuestion(profile: { tag: string; label: string; focus: string }, index: number): Question {
+  const variants = [
+    {
+      title: `${profile.label} reinforcement ${index}: What should you verify first when debugging ${profile.focus}?`,
+      options: ["The exact failing input and expected behavior", "Only the final UI color", "The newest unrelated package", "A random file name"],
+      answer: "A",
+      explanation: "Good debugging starts with a concrete failing case and the expected behavior."
+    },
+    {
+      title: `${profile.label} reinforcement ${index}: Which habit best reduces regressions in ${profile.focus}?`,
+      options: ["Small focused tests around changed behavior", "Skipping validation", "Changing many unrelated modules", "Ignoring edge cases"],
+      answer: "A",
+      explanation: "Focused tests protect the behavior that was changed or clarified."
+    },
+    {
+      title: `${profile.label} reinforcement ${index}: What is a strong sign code should be refactored?`,
+      options: ["Duplicated logic with different edge-case handling", "Clear names", "Small pure functions", "Useful error messages"],
+      answer: "A",
+      explanation: "Duplicated logic often drifts and produces inconsistent behavior."
+    },
+    {
+      title: `${profile.label} reinforcement ${index}: Why prefer explicit boundaries between UI, domain logic and infrastructure?`,
+      options: ["It makes changes easier to test and reason about", "It prevents compilation", "It removes all runtime errors", "It avoids naming variables"],
+      answer: "A",
+      explanation: "Clear boundaries reduce coupling and make behavior easier to verify."
+    },
+    {
+      title: `${profile.label} reinforcement ${index}: Which answer best describes maintainable production code?`,
+      options: ["Readable, tested, observable and scoped to real requirements", "Clever but undocumented", "Large functions with hidden side effects", "Only works on one sample"],
+      answer: "A",
+      explanation: "Production code should be understandable, verifiable and diagnosable."
+    }
+  ];
+  const variant = variants[(index - 1) % variants.length];
+  return {
+    id: "",
+    scope: "public",
+    suiteId: "",
+    type: "single",
+    title: variant.title,
+    difficulty: index % 5 === 0 ? "medium" : "easy",
+    tags: [profile.tag, "reinforcement"],
+    media: [],
+    options: variant.options.map((text, optionIndex) => ({ id: String.fromCharCode(65 + optionIndex), text })),
+    answer: variant.answer,
+    explanation: variant.explanation,
+    metadata: {}
+  };
 }
 
 function parseSeedFields(block: string) {
