@@ -42,9 +42,13 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$PHONE_SSH_HOST"
+          port="${PHONE_SSH_PORT:-10022}"
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          ssh-keyscan -T 10 -p "${PHONE_SSH_PORT:-10022}" "$PHONE_SSH_HOST" >> ~/.ssh/known_hosts
+          echo "Scanning SSH host key for ${PHONE_SSH_HOST}:${port}"
+          if ! ssh-keyscan -T 20 -p "$port" "$PHONE_SSH_HOST" >> ~/.ssh/known_hosts; then
+            echo "::warning::ssh-keyscan failed for ${PHONE_SSH_HOST}:${port}. The deploy step will retry with StrictHostKeyChecking=accept-new."
+          fi
 
       - name: Package release
         run: |
@@ -64,7 +68,8 @@ jobs:
         run: |
           test -n "$PHONE_SSH_PASSWORD"
           sshpass -p "$PHONE_SSH_PASSWORD" scp -P "${PHONE_SSH_PORT:-10022}" \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=20 \
             /tmp/ace-coding-release.tgz \
             "${PHONE_SSH_USER:-Ubuntu}@${PHONE_SSH_HOST}:/tmp/ace-coding-release.tgz"
 
@@ -78,7 +83,8 @@ jobs:
         run: |
           test -n "$PHONE_SSH_PASSWORD"
           sshpass -p "$PHONE_SSH_PASSWORD" ssh -p "${PHONE_SSH_PORT:-10022}" \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=20 \
             "${PHONE_SSH_USER:-Ubuntu}@${PHONE_SSH_HOST}" \
             "PHONE_DEPLOY_PATH='${PHONE_DEPLOY_PATH:-/opt/ace-coding/current}' bash -s" <<'REMOTE'
           set -euo pipefail
