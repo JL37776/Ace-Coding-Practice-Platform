@@ -223,8 +223,8 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    void refreshStudyDashboard(activeSuiteId || undefined);
-  }, [user, activeSuiteId]);
+    void refreshStudyDashboard();
+  }, [user]);
 
   useEffect(() => {
     if (!submissions.some((submission) => submission.status === "queued" || submission.status === "running")) return;
@@ -303,7 +303,6 @@ export default function App() {
     setQuestionResults({});
     if (sessionMode === "practice") {
       const dashboard = await api.getStudyDashboard(activeSuite.id);
-      setStudyDashboard(dashboard);
       setAnswers(dashboard.progress?.answers || {});
       setQuestionIndex(Math.min(dashboard.progress?.questionIndex || 0, Math.max(activeQuestions.length - 1, 0)));
     } else {
@@ -316,16 +315,17 @@ export default function App() {
   async function savePracticeDraft(nextAnswers: Record<string, unknown>, nextIndex = questionIndex) {
     if (!activeSuiteId || activePracticeMode !== "practice") return;
     await api.savePracticeProgress(activeSuiteId, { questionIndex: nextIndex, answers: nextAnswers });
-    void refreshStudyDashboard(activeSuiteId);
+    void refreshStudyDashboard();
   }
 
   async function recordCompletedQuestions(questionIds: string[]) {
     if (!activeSuiteId || !questionIds.length) return;
-    setStudyDashboard(await api.completeStudySession(activeSuiteId, {
+    await api.completeStudySession(activeSuiteId, {
       mode: activePracticeMode,
       questionIds,
       questionCount: activeQuestions.length
-    }));
+    });
+    void refreshStudyDashboard();
   }
 
   function getAnsweredQuestionIds(nextAnswers = answers) {
@@ -717,35 +717,41 @@ export default function App() {
 
       <section className="workspace">
         {mode === "config" && activeSuite ? (
-          <SuiteConfig
-            scope={scope}
-            activeSuite={activeSuite}
-            canEditSuite={canEditActiveSuite}
-            activeQuestions={activeQuestions}
-            rawParsedQuestions={rawParsedQuestions}
-            activeTopicId={activeTopicId}
-            feedbackMode={activeFeedbackMode}
-            rawText={rawText}
-            rawPreview={rawPreview}
-            editorMessage={editorMessage}
-            studyDashboard={studyDashboard}
-            onRawText={setRawText}
-            onParseRaw={() => void parseRaw()}
-            onValidateRaw={() => void validateAndImportRaw()}
-            aiPromptTemplate={aiPromptTemplate}
-            onFeedbackMode={(value) => activeSuiteId && canEditActiveSuite && setSuiteFeedbackMode({ ...suiteFeedbackMode, [activeSuiteId]: value })}
-            editingTitle={editingTitle}
-            editingDescription={editingDescription}
-            editingDuration={editingDuration}
-            isSavingEdit={isSavingEdit}
-            onEditTitle={(id, value) => setEditingTitle({ ...editingTitle, [id]: value })}
-            onEditDescription={(id, value) => setEditingDescription({ ...editingDescription, [id]: value })}
-            onEditDuration={(id, value) => setEditingDuration({ ...editingDuration, [id]: value })}
-            onSaveEdit={() => void saveEditedSuite()}
-            onDeleteSuite={deleteSuite}
-            onStartPractice={() => void startStudySession("practice")}
-            onStartExam={() => void startStudySession("exam")}
-          />
+          <>
+            <StudyDashboardPanel
+              dashboard={studyDashboard}
+              questionCount={activeQuestions.length}
+              selectedSuiteTitle={activeSuite.title}
+              onStartPractice={() => void startStudySession("practice")}
+              onStartExam={() => void startStudySession("exam")}
+            />
+            <SuiteConfig
+              scope={scope}
+              activeSuite={activeSuite}
+              canEditSuite={canEditActiveSuite}
+              activeQuestions={activeQuestions}
+              rawParsedQuestions={rawParsedQuestions}
+              activeTopicId={activeTopicId}
+              feedbackMode={activeFeedbackMode}
+              rawText={rawText}
+              rawPreview={rawPreview}
+              editorMessage={editorMessage}
+              onRawText={setRawText}
+              onParseRaw={() => void parseRaw()}
+              onValidateRaw={() => void validateAndImportRaw()}
+              aiPromptTemplate={aiPromptTemplate}
+              onFeedbackMode={(value) => activeSuiteId && canEditActiveSuite && setSuiteFeedbackMode({ ...suiteFeedbackMode, [activeSuiteId]: value })}
+              editingTitle={editingTitle}
+              editingDescription={editingDescription}
+              editingDuration={editingDuration}
+              isSavingEdit={isSavingEdit}
+              onEditTitle={(id, value) => setEditingTitle({ ...editingTitle, [id]: value })}
+              onEditDescription={(id, value) => setEditingDescription({ ...editingDescription, [id]: value })}
+              onEditDuration={(id, value) => setEditingDuration({ ...editingDuration, [id]: value })}
+              onSaveEdit={() => void saveEditedSuite()}
+              onDeleteSuite={deleteSuite}
+            />
+          </>
         ) : mode === "config" ? (
           <EmptySuiteState
             scope={scope}
@@ -966,7 +972,6 @@ function SuiteConfig(props: {
   rawParsedQuestions: Question[];
   activeTopicId: string;
   feedbackMode: PracticeFeedbackMode;
-  studyDashboard?: StudyDashboard;
   rawText: string;
   rawPreview: string;
   editorMessage: string;
@@ -984,23 +989,15 @@ function SuiteConfig(props: {
   onEditDuration: (id: string, value: string) => void;
   onSaveEdit: () => void;
   onDeleteSuite: (id: string) => void;
-  onStartPractice: () => void;
-  onStartExam: () => void;
 }) {
   return (
     <>
-      <header className="suite-dashboard">
+      <header className="hero-bar compact">
         <div>
           <p className="eyebrow">Suite Configuration</p>
           <h2>{props.activeSuite?.title || "Choose or create a suite"}</h2>
           <p>{props.activeSuite?.description || "Paste a whole raw suite, set time, add similar questions, then practice."}</p>
         </div>
-        <StudyDashboardPanel
-          dashboard={props.studyDashboard}
-          questionCount={props.activeQuestions.length}
-          onStartPractice={props.onStartPractice}
-          onStartExam={props.onStartExam}
-        />
       </header>
 
       <section className="editor-grid">
@@ -1070,38 +1067,46 @@ function SuiteConfig(props: {
 function StudyDashboardPanel(props: {
   dashboard?: StudyDashboard;
   questionCount: number;
+  selectedSuiteTitle?: string;
   onStartPractice: () => void;
   onStartExam: () => void;
 }) {
   const progressCount = props.dashboard?.progress ? Object.keys(props.dashboard.progress.answers).length : 0;
   return (
-    <aside className="study-dashboard">
-      <div className="study-dashboard-top">
-        <div>
-          <span>Today</span>
-          <strong>{props.dashboard?.todayCount || 0}</strong>
-        </div>
-        <div>
-          <span>90-day total</span>
-          <strong>{props.dashboard?.totalCount || 0}</strong>
-        </div>
-        <div>
-          <span>Active days</span>
-          <strong>{props.dashboard?.activeDays || 0}</strong>
-        </div>
+    <section className="study-dashboard">
+      <div className="study-dashboard-copy">
+        <p className="eyebrow">Study Dashboard</p>
+        <h2>Your Practice Activity</h2>
+        <p>Global heatmap across all question banks. Start the selected suite when you are ready.</p>
       </div>
-      <ActivityHeatmap activity={props.dashboard?.heatmap || []} />
+      <div className="study-dashboard-main">
+        <div className="study-dashboard-top">
+          <div>
+            <span>Today</span>
+            <strong>{props.dashboard?.todayCount || 0}</strong>
+          </div>
+          <div>
+            <span>90-day total</span>
+            <strong>{props.dashboard?.totalCount || 0}</strong>
+          </div>
+          <div>
+            <span>Active days</span>
+            <strong>{props.dashboard?.activeDays || 0}</strong>
+          </div>
+        </div>
+        <ActivityHeatmap activity={props.dashboard?.heatmap || []} />
+      </div>
       <div className="study-actions">
         <button onClick={props.onStartPractice} disabled={!props.questionCount}>
           <span>{progressCount ? "Continue Practice" : "Practice Mode"}</span>
-          <small>{progressCount ? `${progressCount} saved answers` : "Auto saves unfinished work"}</small>
+          <small>{progressCount ? `${progressCount} saved answers` : `Selected: ${props.selectedSuiteTitle || "no suite"}`}</small>
         </button>
         <button className="exam-action" onClick={props.onStartExam} disabled={!props.questionCount}>
           <span>Exam Mode</span>
-          <small>Only full submissions are recorded</small>
+          <small>Finish all questions to record</small>
         </button>
       </div>
-    </aside>
+    </section>
   );
 }
 
