@@ -246,57 +246,63 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 
-var payload = JsonSerializer.Deserialize<Payload>(${JSON.stringify(JSON.stringify(toHarnessPayload(job)))})!;
-var solutionType = Type.GetType("Solution") ?? Assembly.GetExecutingAssembly().GetTypes().FirstOrDefault(type => type.Name == "Solution");
-if (solutionType is null)
+public static class Program
 {
-  Console.WriteLine(JsonSerializer.Serialize(new JudgeResultDto("runtime_error", "", "missing class Solution", Array.Empty<TestResultDto>())));
-  return;
-}
-var method = solutionType.GetMethod(payload.entrypoint, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
-if (method is null)
-{
-  Console.WriteLine(JsonSerializer.Serialize(new JudgeResultDto("runtime_error", "", "missing method " + payload.entrypoint, Array.Empty<TestResultDto>())));
-  return;
-}
-var instance = method.IsStatic ? null : Activator.CreateInstance(solutionType);
-var parameters = method.GetParameters();
-var overall = "accepted";
-var results = new List<TestResultDto>();
-foreach (var testCase in payload.testCases)
-{
-  var status = "accepted";
-  var stderr = "";
-  try
+  public static void Main()
   {
-    var args = parameters.Select(parameter =>
+    var payload = JsonSerializer.Deserialize<Payload>(${JSON.stringify(JSON.stringify(toHarnessPayload(job)))})!;
+    var solutionType = Type.GetType("Solution") ?? Assembly.GetExecutingAssembly().GetTypes().FirstOrDefault(type => type.Name == "Solution");
+    if (solutionType is null)
     {
-      if (!testCase.inputJson.TryGetProperty(parameter.Name!, out var value)) throw new Exception("missing argument " + parameter.Name);
-      return value.Deserialize(parameter.ParameterType, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-    }).ToArray();
-    var actual = method.Invoke(instance, args);
-    var actualJson = JsonSerializer.Serialize(actual);
-    var expectedJson = testCase.expectedJson.GetRawText();
-    if (actualJson != expectedJson)
-    {
-      status = "wrong_answer";
-      stderr = "expected " + expectedJson + ", got " + actualJson;
+      Console.WriteLine(JsonSerializer.Serialize(new JudgeResultDto("runtime_error", "", "missing class Solution", Array.Empty<TestResultDto>())));
+      return;
     }
+    var method = solutionType.GetMethod(payload.entrypoint, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+    if (method is null)
+    {
+      Console.WriteLine(JsonSerializer.Serialize(new JudgeResultDto("runtime_error", "", "missing method " + payload.entrypoint, Array.Empty<TestResultDto>())));
+      return;
+    }
+    var instance = method.IsStatic ? null : Activator.CreateInstance(solutionType);
+    var parameters = method.GetParameters();
+    var overall = "accepted";
+    var results = new List<TestResultDto>();
+    foreach (var testCase in payload.testCases)
+    {
+      var status = "accepted";
+      var stderr = "";
+      try
+      {
+        var args = parameters.Select(parameter =>
+        {
+          if (!testCase.inputJson.TryGetProperty(parameter.Name!, out var value)) throw new Exception("missing argument " + parameter.Name);
+          return value.Deserialize(parameter.ParameterType, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }).ToArray();
+        var actual = method.Invoke(instance, args);
+        var actualJson = JsonSerializer.Serialize(actual);
+        var expectedJson = testCase.expectedJson.GetRawText();
+        if (actualJson != expectedJson)
+        {
+          status = "wrong_answer";
+          stderr = "expected " + expectedJson + ", got " + actualJson;
+        }
+      }
+      catch (TargetInvocationException error)
+      {
+        status = "runtime_error";
+        stderr = error.InnerException?.ToString() ?? error.ToString();
+      }
+      catch (Exception error)
+      {
+        status = "runtime_error";
+        stderr = error.ToString();
+      }
+      if (overall == "accepted" && status != "accepted") overall = status;
+      results.Add(new TestResultDto(testCase.id, status, stderr.Length > 1000 ? stderr[..1000] : stderr, 0));
+    }
+    Console.WriteLine(JsonSerializer.Serialize(new JudgeResultDto(overall, "", "", results)));
   }
-  catch (TargetInvocationException error)
-  {
-    status = "runtime_error";
-    stderr = error.InnerException?.ToString() ?? error.ToString();
-  }
-  catch (Exception error)
-  {
-    status = "runtime_error";
-    stderr = error.ToString();
-  }
-  if (overall == "accepted" && status != "accepted") overall = status;
-  results.Add(new TestResultDto(testCase.id, status, stderr.Length > 1000 ? stderr[..1000] : stderr, 0));
 }
-Console.WriteLine(JsonSerializer.Serialize(new JudgeResultDto(overall, "", "", results)));
 
 record Payload(string entrypoint, int timeLimitMs, TestCaseDto[] testCases);
 record TestCaseDto(string id, JsonElement inputJson, JsonElement expectedJson);
