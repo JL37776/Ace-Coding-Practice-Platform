@@ -15,9 +15,10 @@ const starterCode = {
 } satisfies Record<Language, string>;
 
 const languages: Language[] = ["python", "typescript", "javascript", "csharp", "java"];
+
 const defaultRaw = `@suite
 title=Imported Mixed Practice
-description=Paste raw topic content, validate it, then import it into the selected bank.
+description=Paste a whole suite here. Then set time, validate, import, and practice.
 duration=15
 
 @q
@@ -46,6 +47,10 @@ export default function App() {
   const [activeTopicId, setActiveTopicId] = useState("topic-arrays");
   const [activeSuiteId, setActiveSuiteId] = useState("suite-two-sum");
   const [scope, setScope] = useState<BankScope>("public");
+  const [mode, setMode] = useState<"config" | "practice">("config");
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [feedback, setFeedback] = useState("");
   const [language, setLanguage] = useState<Language>("python");
   const [sourceCode, setSourceCode] = useState(starterCode.python);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,14 +60,17 @@ export default function App() {
   const [rawText, setRawText] = useState(defaultRaw);
   const [rawPreview, setRawPreview] = useState("");
   const [editorMessage, setEditorMessage] = useState("");
-  const [newTopicName, setNewTopicName] = useState("");
-  const [newSuiteTitle, setNewSuiteTitle] = useState("");
+  const [newTopicName, setNewTopicName] = useState<Record<BankScope, string>>({ public: "", personal: "" });
+  const [newSuiteTitle, setNewSuiteTitle] = useState<Record<BankScope, string>>({ public: "", personal: "" });
+  const [openBank, setOpenBank] = useState<Record<BankScope, boolean>>({ public: true, personal: true });
+  const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({});
 
   const publicTopics = topics.filter((topic) => topic.scope === "public");
   const personalTopics = topics.filter((topic) => topic.scope === "personal");
   const activeSuite = suites.find((suite) => suite.id === activeSuiteId);
   const activeQuestions = questions.filter((question) => question.suiteId === activeSuiteId);
-  const codingQuestion = activeQuestions.find((question) => question.type === "coding");
+  const currentQuestion = activeQuestions[questionIndex];
+  const codingQuestion = currentQuestion?.type === "coding" ? currentQuestion : undefined;
   const selectedProblem = useMemo(
     () => problems.find((problem) => problem.id === codingQuestion?.problemId) || problems[0],
     [codingQuestion, problems]
@@ -98,17 +106,20 @@ export default function App() {
   async function refreshWorkspace() {
     const [topicList, suiteList, questionList, problemList, submissionList] = await Promise.all([
       api.listTopics(),
-      api.listSuites(activeTopicId, scope),
-      api.listQuestions(undefined, scope),
+      api.listSuites(),
+      api.listQuestions(),
       api.listProblems(),
       api.listSubmissions()
     ]);
+    const activeTopicIds = collectTopicIds(topicList, activeTopicId);
+    const scopedSuites = suiteList.filter((suite) => suite.scope === scope && activeTopicIds.has(suite.topicId));
     setTopics(topicList);
     setSuites(suiteList);
     setQuestions(questionList);
     setProblems(problemList);
     setSubmissions(submissionList);
-    if (!suiteList.some((suite) => suite.id === activeSuiteId) && suiteList[0]) setActiveSuiteId(suiteList[0].id);
+    if (!scopedSuites.some((suite) => suite.id === activeSuiteId)) setActiveSuiteId(scopedSuites[0]?.id || "");
+    setQuestionIndex(0);
   }
 
   async function refreshSubmissions() {
@@ -127,26 +138,32 @@ export default function App() {
   }
 
   async function addTopic(targetScope: BankScope) {
-    if (!newTopicName.trim()) return;
-    const topic = await api.createTopic({ scope: targetScope, name: newTopicName.trim() });
-    setNewTopicName("");
-    setScope(targetScope);
-    setActiveTopicId(topic.id);
+    const name = newTopicName[targetScope].trim();
+    if (!name) return;
+    const topic = await api.createTopic({ scope: targetScope, name });
+    setNewTopicName({ ...newTopicName, [targetScope]: "" });
+    selectTopic(targetScope, topic.id);
     await refreshWorkspace();
   }
 
   async function addSuite(targetScope: BankScope) {
-    if (!newSuiteTitle.trim()) return;
+    const title = newSuiteTitle[targetScope].trim();
+    if (!title) return;
+    const targetTopicId =
+      scope === targetScope && flattenTopics(topics).some((topic) => topic.id === activeTopicId && topic.scope === targetScope)
+        ? activeTopicId
+        : flattenTopics(topics).find((topic) => topic.scope === targetScope)?.id;
+    if (!targetTopicId) return;
     const suite = await api.createSuite({
       scope: targetScope,
-      topicId: activeTopicId,
-      title: newSuiteTitle.trim(),
+      topicId: targetTopicId,
+      title,
       description: "Created from the suite quick-add panel.",
       questionCount: 0,
       durationMinutes: 15,
       allowedTypes: ["single", "multiple", "boolean", "blank", "coding"]
     });
-    setNewSuiteTitle("");
+    setNewSuiteTitle({ ...newSuiteTitle, [targetScope]: "" });
     setScope(targetScope);
     setActiveSuiteId(suite.id);
     await refreshWorkspace();
@@ -177,6 +194,24 @@ export default function App() {
     }
   }
 
+  function submitNonCoding() {
+    if (!currentQuestion) return;
+    const value = answers[currentQuestion.id];
+    if (value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) {
+      setFeedback("Answer required.");
+      return;
+    }
+    const expected = currentQuestion.answer;
+    const ok = JSON.stringify(value) === JSON.stringify(expected);
+    setFeedback(ok ? "Correct." : `Submitted. Expected answer: ${JSON.stringify(expected)}`);
+  }
+
+  function selectTopic(targetScope: BankScope, id: string) {
+    setScope(targetScope);
+    setActiveTopicId(id);
+    setMode("config");
+  }
+
   if (!user) {
     return (
       <main className="auth-shell">
@@ -203,95 +238,341 @@ export default function App() {
           <button className="icon-button" onClick={() => { clearAuthToken(); setUser(null); }}>Exit</button>
         </div>
         <div className="user-card"><strong>{user.displayName}</strong><span>{user.role} account</span></div>
-        <BankPanel title="Public Question Bank" scope="public" topics={publicTopics} activeScope={scope} activeId={activeTopicId} user={user} onSelect={selectTopic} />
-        <BankPanel title="Personal Question Bank" scope="personal" topics={personalTopics} activeScope={scope} activeId={activeTopicId} user={user} onSelect={selectTopic} />
-        <div className="quick-add">
-          <strong>Add to {scope === "public" ? "Public" : "My"} Bank</strong>
-          <input placeholder="New topic name" value={newTopicName} onChange={(event) => setNewTopicName(event.target.value)} />
-          <button onClick={() => void addTopic(scope)} disabled={scope === "public" && user.role !== "admin"}>Add Topic</button>
-          <input placeholder="New suite title" value={newSuiteTitle} onChange={(event) => setNewSuiteTitle(event.target.value)} />
-          <button onClick={() => void addSuite(scope)} disabled={scope === "public" && user.role !== "admin"}>Add Suite</button>
-        </div>
+        <BankPanel
+          title="Public Question Bank"
+          scope="public"
+          topics={publicTopics}
+          suites={suites.filter((suite) => suite.scope === "public")}
+          activeScope={scope}
+          activeTopicId={activeTopicId}
+          activeSuiteId={activeSuiteId}
+          user={user}
+          open={openBank.public}
+          openTopics={openTopics}
+          newTopicName={newTopicName.public}
+          newSuiteTitle={newSuiteTitle.public}
+          onToggleBank={() => setOpenBank({ ...openBank, public: !openBank.public })}
+          onToggleTopic={(id) => setOpenTopics({ ...openTopics, [id]: !openTopics[id] })}
+          onSelectTopic={selectTopic}
+          onSelectSuite={(id) => { setScope("public"); setActiveSuiteId(id); setMode("config"); }}
+          onTopicName={(value) => setNewTopicName({ ...newTopicName, public: value })}
+          onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, public: value })}
+          onAddTopic={() => void addTopic("public")}
+          onAddSuite={() => void addSuite("public")}
+        />
+        <BankPanel
+          title="Personal Question Bank"
+          scope="personal"
+          topics={personalTopics}
+          suites={suites.filter((suite) => suite.scope === "personal")}
+          activeScope={scope}
+          activeTopicId={activeTopicId}
+          activeSuiteId={activeSuiteId}
+          user={user}
+          open={openBank.personal}
+          openTopics={openTopics}
+          newTopicName={newTopicName.personal}
+          newSuiteTitle={newSuiteTitle.personal}
+          onToggleBank={() => setOpenBank({ ...openBank, personal: !openBank.personal })}
+          onToggleTopic={(id) => setOpenTopics({ ...openTopics, [id]: !openTopics[id] })}
+          onSelectTopic={selectTopic}
+          onSelectSuite={(id) => { setScope("personal"); setActiveSuiteId(id); setMode("config"); }}
+          onTopicName={(value) => setNewTopicName({ ...newTopicName, personal: value })}
+          onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, personal: value })}
+          onAddTopic={() => void addTopic("personal")}
+          onAddSuite={() => void addSuite("personal")}
+        />
       </aside>
 
       <section className="workspace">
-        <header className="hero-bar">
-          <div>
-            <p className="eyebrow">Topic to Suite to Practice to Score</p>
-            <h2>{activeSuite?.title || "Choose a suite"}</h2>
-            <p>{activeSuite?.description || "Create a personal suite or choose a public suite to start."}</p>
-          </div>
-          <div className="score-card"><strong>{activeSuite ? `${activeSuite.scorePercent}% (${activeSuite.done}/${activeSuite.total})` : "0% (0/0)"}</strong><span>auto score</span></div>
-        </header>
-
-        <section className="suite-grid">
-          {suites.length === 0 ? <div className="empty-state">No {scope} suites under this topic yet.</div> : suites.map((suite) => (
-            <button key={suite.id} className={suite.id === activeSuiteId ? "suite-card active" : "suite-card"} onClick={() => setActiveSuiteId(suite.id)}>
-              <span>{suite.scope} suite</span><strong>{suite.title}</strong><p>{suite.description}</p><em>{suite.scorePercent}% ({suite.done}/{suite.total})</em>
-            </button>
-          ))}
-        </section>
-
-        <section className="editor-grid">
-          <section className="panel">
-            <div className="panel-heading"><div><h3>Create / Edit Test Suite</h3><p>Suite fields, constraints, raw import, and AI generation live here.</p></div><button className="secondary">Global Constraints</button></div>
-            <div className="form-grid">
-              <label>Suite Name<input value={activeSuite?.title || ""} readOnly /></label>
-              <label>Parent Topic<input value={activeTopicId} readOnly /></label>
-              <label>Time Limit<input value={`${activeSuite?.durationMinutes || 15} minutes`} readOnly /></label>
-              <label>Question Count<input value={`${activeSuite?.questionCount || activeQuestions.length} questions`} readOnly /></label>
-            </div>
-            <div className="type-row">{(activeSuite?.allowedTypes || ["single", "multiple", "boolean", "blank", "coding"]).map((type) => <span key={type}>{type}</span>)}</div>
-            <div className="question-list">{activeQuestions.map((question) => <article key={question.id}><strong>{question.title}</strong><span>{question.type} | {question.difficulty}</span>{question.options && <p>{question.options.map((option) => `${option.id}. ${option.text}`).join("  ")}</p>}</article>)}</div>
-          </section>
-
-          <section className="panel raw-panel">
-            <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI-generated questions and answers, then parse, validate, and import.</p></div><button className="secondary">AI Add Questions</button></div>
-            <textarea className="raw-editor" value={rawText} onChange={(event) => setRawText(event.target.value)} />
-            <div className="actions"><button onClick={() => void parseRaw()}>Parse</button><button className="secondary" onClick={() => void parseRaw()}>Validate</button><button onClick={() => void importRaw()}>Import</button></div>
-            {editorMessage && <div className="notice">{editorMessage}</div>}
-            {rawPreview && <pre className="raw-preview">{rawPreview}</pre>}
-          </section>
-        </section>
-
-        <section className="content-grid">
-          <section className="panel runner-panel">
-            <div className="panel-heading"><div><h3>Runner Practice</h3><p>{selectedProblem?.statement || "Coding question is required for runner submission."}</p></div><select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>{languages.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-            <textarea className="editor" value={sourceCode} spellCheck={false} onChange={(event) => setSourceCode(event.target.value)} />
-            <div className="actions"><button onClick={submitCode} disabled={isSubmitting || !selectedProblem}>{isSubmitting ? "Submitting..." : "Run Code"}</button><button className="secondary" onClick={() => void refreshSubmissions()}>Refresh</button></div>
-          </section>
-          <section className="panel">
-            <h3>Recent Results</h3>
-            <div className="submission-list">{submissions.slice(0, 6).map((submission) => <article key={submission.id} className="submission"><strong>{submission.status}</strong><span>{submission.language} | {new Date(submission.createdAt).toLocaleString()}</span><pre>{formatSubmission(submission)}</pre></article>)}</div>
-          </section>
-        </section>
+        {mode === "config" ? (
+          <SuiteConfig
+            scope={scope}
+            activeSuite={activeSuite}
+            activeQuestions={activeQuestions}
+            activeTopicId={activeTopicId}
+            rawText={rawText}
+            rawPreview={rawPreview}
+            editorMessage={editorMessage}
+            onRawText={setRawText}
+            onParseRaw={() => void parseRaw()}
+            onImportRaw={() => void importRaw()}
+            onPractice={() => {
+              setQuestionIndex(0);
+              setFeedback("");
+              setMode("practice");
+            }}
+          />
+        ) : (
+          <PracticePanel
+            suite={activeSuite}
+            questions={activeQuestions}
+            questionIndex={questionIndex}
+            currentQuestion={currentQuestion}
+            answers={answers}
+            feedback={feedback}
+            language={language}
+            sourceCode={sourceCode}
+            submissions={submissions}
+            isSubmitting={isSubmitting}
+            selectedProblem={selectedProblem}
+            onBack={() => setMode("config")}
+            onQuestionIndex={(index) => { setQuestionIndex(index); setFeedback(""); }}
+            onAnswer={(questionId, value) => setAnswers({ ...answers, [questionId]: value })}
+            onSubmitNonCoding={submitNonCoding}
+            onLanguage={setLanguage}
+            onSourceCode={setSourceCode}
+            onSubmitCode={() => void submitCode()}
+            onRefresh={() => void refreshSubmissions()}
+          />
+        )}
       </section>
     </main>
   );
-
-  function selectTopic(targetScope: BankScope, id: string) {
-    setScope(targetScope);
-    setActiveTopicId(id);
-  }
 }
 
-function BankPanel({ title, scope, topics, activeScope, activeId, user, onSelect }: { title: string; scope: BankScope; topics: TopicNode[]; activeScope: BankScope; activeId: string; user: User; onSelect: (scope: BankScope, id: string) => void }) {
-  const disabled = scope === "public" && user.role !== "admin";
+function BankPanel(props: {
+  title: string;
+  scope: BankScope;
+  topics: TopicNode[];
+  suites: TrainingSuite[];
+  activeScope: BankScope;
+  activeTopicId: string;
+  activeSuiteId: string;
+  user: User;
+  open: boolean;
+  openTopics: Record<string, boolean>;
+  newTopicName: string;
+  newSuiteTitle: string;
+  onToggleBank: () => void;
+  onToggleTopic: (id: string) => void;
+  onSelectTopic: (scope: BankScope, id: string) => void;
+  onSelectSuite: (id: string) => void;
+  onTopicName: (value: string) => void;
+  onSuiteTitle: (value: string) => void;
+  onAddTopic: () => void;
+  onAddSuite: () => void;
+}) {
+  const disabled = props.scope === "public" && props.user.role !== "admin";
   return (
     <section className="bank-section">
-      <div className="bank-heading"><strong>{title}</strong>{disabled && <span>admin only edit</span>}</div>
-      <div className="tree-list">{topics.length ? topics.map((topic) => <TopicNodeView key={topic.id} scope={scope} topic={topic} active={activeScope === scope && activeId === topic.id} activeId={activeId} onSelect={onSelect} />) : <div className="bank-empty">No topics yet.</div>}</div>
+      <button className="bank-heading" onClick={props.onToggleBank}>
+        <strong>{props.open ? "[-]" : "[+]"} {props.title}</strong>
+        {disabled && <span>admin edit</span>}
+      </button>
+      {props.open && (
+        <>
+          <div className="tree-list">
+            {props.topics.length ? props.topics.map((topic) => (
+              <TopicNodeView
+                key={topic.id}
+                topic={topic}
+                scope={props.scope}
+                suites={props.suites}
+                activeTopicId={props.activeScope === props.scope ? props.activeTopicId : ""}
+                activeSuiteId={props.activeScope === props.scope ? props.activeSuiteId : ""}
+                openTopics={props.openTopics}
+                onToggleTopic={props.onToggleTopic}
+                onSelectTopic={props.onSelectTopic}
+                onSelectSuite={props.onSelectSuite}
+              />
+            )) : <div className="bank-empty">No topics yet.</div>}
+          </div>
+          <div className="bank-add">
+            <input placeholder="New topic name" value={props.newTopicName} onChange={(event) => props.onTopicName(event.target.value)} />
+            <button onClick={props.onAddTopic} disabled={disabled}>Add Topic</button>
+            <input placeholder="New suite title" value={props.newSuiteTitle} onChange={(event) => props.onSuiteTitle(event.target.value)} />
+            <button onClick={props.onAddSuite} disabled={disabled}>Add Suite</button>
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-function TopicNodeView({ topic, scope, active, activeId, onSelect }: { topic: TopicNode; scope: BankScope; active: boolean; activeId: string; onSelect: (scope: BankScope, id: string) => void }) {
+function TopicNodeView(props: {
+  topic: TopicNode;
+  scope: BankScope;
+  suites: TrainingSuite[];
+  activeTopicId: string;
+  activeSuiteId: string;
+  openTopics: Record<string, boolean>;
+  onToggleTopic: (id: string) => void;
+  onSelectTopic: (scope: BankScope, id: string) => void;
+  onSelectSuite: (id: string) => void;
+}) {
+  const open = props.openTopics[props.topic.id] ?? true;
+  const topicSuites = props.suites.filter((suite) => suite.topicId === props.topic.id);
+  const hasChildren = Boolean(props.topic.children?.length || topicSuites.length);
   return (
     <div>
-      <button className={active ? "topic active" : "topic"} onClick={() => onSelect(scope, topic.id)}><strong>{topic.name}</strong><span>{topic.scorePercent}% ({topic.done}/{topic.total})</span></button>
-      {topic.children?.map((child) => <div key={child.id} className="child-topic"><TopicNodeView topic={child} scope={scope} active={activeId === child.id} activeId={activeId} onSelect={onSelect} /></div>)}
+      <div className={props.topic.id === props.activeTopicId ? "topic-row active" : "topic-row"}>
+        <button className="collapse-button" onClick={() => props.onToggleTopic(props.topic.id)}>{hasChildren ? (open ? "-" : "+") : ""}</button>
+        <button className="topic-main" onClick={() => props.onSelectTopic(props.scope, props.topic.id)}>
+          <strong>{props.topic.name}</strong>
+          <span>{props.topic.scorePercent}% ({props.topic.done}/{props.topic.total})</span>
+        </button>
+      </div>
+      {open && (
+        <div className="child-topic">
+          {props.topic.children?.map((child) => <TopicNodeView key={child.id} {...props} topic={child} />)}
+          {topicSuites.map((suite) => (
+            <button key={suite.id} className={suite.id === props.activeSuiteId ? "suite-tree-item active" : "suite-tree-item"} onClick={() => props.onSelectSuite(suite.id)}>
+              <strong>{suite.title}</strong>
+              <span>{suite.scorePercent}% ({suite.done}/{suite.total})</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+function SuiteConfig(props: {
+  scope: BankScope;
+  activeSuite?: TrainingSuite;
+  activeQuestions: Question[];
+  activeTopicId: string;
+  rawText: string;
+  rawPreview: string;
+  editorMessage: string;
+  onRawText: (value: string) => void;
+  onParseRaw: () => void;
+  onImportRaw: () => void;
+  onPractice: () => void;
+}) {
+  return (
+    <>
+      <header className="hero-bar compact">
+        <div>
+          <p className="eyebrow">Suite Configuration</p>
+          <h2>{props.activeSuite?.title || "Choose or create a suite"}</h2>
+          <p>{props.activeSuite?.description || "Paste a whole raw suite, set time, add similar questions, then practice."}</p>
+        </div>
+        <button className="practice-button" onClick={props.onPractice} disabled={!props.activeQuestions.length}>Practice</button>
+      </header>
+
+      <section className="editor-grid">
+        <section className="panel">
+          <div className="panel-heading">
+            <div><h3>Create / Edit Test Suite</h3><p>This page configures the suite. Code appears only inside coding questions during practice.</p></div>
+            <button className="secondary">Save</button>
+          </div>
+          <div className="form-grid">
+            <label>Suite Name<input value={props.activeSuite?.title || ""} readOnly /></label>
+            <label>Parent Topic<input value={props.activeTopicId} readOnly /></label>
+            <label>Time Limit<input value={`${props.activeSuite?.durationMinutes || 15} minutes`} readOnly /></label>
+            <label>Question Count<input value={`${props.activeSuite?.questionCount || props.activeQuestions.length} questions`} readOnly /></label>
+          </div>
+          <div className="type-row">{(props.activeSuite?.allowedTypes || ["single", "multiple", "boolean", "blank", "coding"]).map((type) => <span key={type}>{type}</span>)}</div>
+          <div className="question-list">{props.activeQuestions.map((question, index) => <article key={question.id}><strong>{index + 1}. {question.title}</strong><span>{question.type} | {question.difficulty}</span></article>)}</div>
+        </section>
+
+        <section className="panel raw-panel">
+          <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI/generated raw content for one full suite. Parse, validate, import.</p></div><button className="secondary">AI Similar Questions</button></div>
+          <textarea className="raw-editor" value={props.rawText} onChange={(event) => props.onRawText(event.target.value)} />
+          <div className="actions"><button onClick={props.onParseRaw}>Parse</button><button className="secondary" onClick={props.onParseRaw}>Validate</button><button onClick={props.onImportRaw}>Import</button></div>
+          {props.editorMessage && <div className="notice">{props.editorMessage}</div>}
+          {props.rawPreview && <pre className="raw-preview">{props.rawPreview}</pre>}
+          <div className="ai-box"><strong>AI Add Similar Questions</strong><span>Target: {props.scope} bank</span><span>Generate similar questions after schema validation. Provider wiring comes next.</span></div>
+        </section>
+      </section>
+    </>
+  );
+}
+
+function PracticePanel(props: {
+  suite?: TrainingSuite;
+  questions: Question[];
+  questionIndex: number;
+  currentQuestion?: Question;
+  answers: Record<string, unknown>;
+  feedback: string;
+  language: Language;
+  sourceCode: string;
+  submissions: Submission[];
+  isSubmitting: boolean;
+  selectedProblem?: Problem;
+  onBack: () => void;
+  onQuestionIndex: (index: number) => void;
+  onAnswer: (questionId: string, value: unknown) => void;
+  onSubmitNonCoding: () => void;
+  onLanguage: (language: Language) => void;
+  onSourceCode: (value: string) => void;
+  onSubmitCode: () => void;
+  onRefresh: () => void;
+}) {
+  const question = props.currentQuestion;
+  return (
+    <>
+      <header className="hero-bar compact">
+        <div>
+          <p className="eyebrow">Practice</p>
+          <h2>{props.suite?.title || "Practice Suite"}</h2>
+          <p>Question {props.questionIndex + 1} / {props.questions.length || 0}</p>
+        </div>
+        <button className="secondary" onClick={props.onBack}>Back to Suite Config</button>
+      </header>
+      <section className="practice-layout">
+        <aside className="question-nav">
+          {props.questions.map((item, index) => <button key={item.id} className={index === props.questionIndex ? "active" : ""} onClick={() => props.onQuestionIndex(index)}>{index + 1}. {item.type}</button>)}
+        </aside>
+        <section className="panel practice-card">
+          {question ? <QuestionRenderer {...props} question={question} /> : <div className="empty-state">This suite has no questions yet.</div>}
+        </section>
+      </section>
+    </>
+  );
+}
+
+function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { question: Question }) {
+  const value = props.answers[props.question.id];
+  if (props.question.type === "coding") {
+    return (
+      <>
+        <div className="panel-heading"><div><h3>{props.question.title}</h3><p>{props.question.description || props.selectedProblem?.statement}</p></div><select value={props.language} onChange={(event) => props.onLanguage(event.target.value as Language)}>{languages.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+        <textarea className="editor" value={props.sourceCode} spellCheck={false} onChange={(event) => props.onSourceCode(event.target.value)} />
+        <div className="actions"><button onClick={props.onSubmitCode} disabled={props.isSubmitting || !props.selectedProblem}>{props.isSubmitting ? "Running..." : "Run Code"}</button><button className="secondary" onClick={props.onRefresh}>Refresh</button></div>
+        <ResultList submissions={props.submissions} />
+      </>
+    );
+  }
+  return (
+    <>
+      <h3>{props.question.title}</h3>
+      {props.question.description && <p>{props.question.description}</p>}
+      {props.question.type === "single" && <OptionList question={props.question} value={value as string | undefined} onAnswer={props.onAnswer} />}
+      {props.question.type === "multiple" && <MultiOptionList question={props.question} value={(value as string[] | undefined) || []} onAnswer={props.onAnswer} />}
+      {props.question.type === "boolean" && <div className="choice-list"><button className={value === true ? "selected" : ""} onClick={() => props.onAnswer(props.question.id, true)}>True</button><button className={value === false ? "selected" : ""} onClick={() => props.onAnswer(props.question.id, false)}>False</button></div>}
+      {props.question.type === "blank" && <input className="answer-input" placeholder="Type your answer" value={(value as string | undefined) || ""} onChange={(event) => props.onAnswer(props.question.id, event.target.value)} />}
+      <div className="actions"><button onClick={props.onSubmitNonCoding}>Submit Answer</button></div>
+      {props.feedback && <div className="notice">{props.feedback}</div>}
+    </>
+  );
+}
+
+function OptionList({ question, value, onAnswer }: { question: Question; value?: string; onAnswer: (id: string, value: unknown) => void }) {
+  return <div className="choice-list">{question.options?.map((option) => <button key={option.id} className={value === option.id ? "selected" : ""} onClick={() => onAnswer(question.id, option.id)}><strong>{option.id}</strong>{option.text}</button>)}</div>;
+}
+
+function MultiOptionList({ question, value, onAnswer }: { question: Question; value: string[]; onAnswer: (id: string, value: unknown) => void }) {
+  return <div className="choice-list">{question.options?.map((option) => {
+    const selected = value.includes(option.id);
+    return <button key={option.id} className={selected ? "selected" : ""} onClick={() => onAnswer(question.id, selected ? value.filter((id) => id !== option.id) : [...value, option.id])}><strong>{option.id}</strong>{option.text}</button>;
+  })}</div>;
+}
+
+function ResultList({ submissions }: { submissions: Submission[] }) {
+  return <div className="submission-list">{submissions.slice(0, 4).map((submission) => <article key={submission.id} className="submission"><strong>{submission.status}</strong><span>{submission.language} | {new Date(submission.createdAt).toLocaleString()}</span><pre>{formatSubmission(submission)}</pre></article>)}</div>;
+}
+
+function flattenTopics(nodes: TopicNode[]): TopicNode[] {
+  return nodes.flatMap((node) => [node, ...flattenTopics(node.children || [])]);
+}
+
+function collectTopicIds(nodes: TopicNode[], topicId: string) {
+  const topic = flattenTopics(nodes).find((item) => item.id === topicId);
+  return new Set(topic ? [topic.id, ...flattenTopics(topic.children || []).map((item) => item.id)] : []);
 }
 
 function formatSubmission(submission: Submission) {
