@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { AuthSession, BankScope, Language, PracticeFeedbackMode, Problem, Question, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
+import CodeMirror from "@uiw/react-codemirror";
+import { java } from "@codemirror/lang-java";
+import { javascript } from "@codemirror/lang-javascript";
+import { python } from "@codemirror/lang-python";
+import { EditorView } from "@codemirror/view";
+import { csharp } from "@replit/codemirror-lang-csharp";
 import { api, clearAuthToken, setAuthToken } from "./api";
 import "./styles.css";
 
@@ -15,6 +21,43 @@ const starterCode = {
 } satisfies Record<Language, string>;
 
 const languages: Language[] = ["python", "typescript", "javascript", "csharp", "java"];
+
+const codeEditorTheme = EditorView.theme({
+  "&": {
+    minHeight: "300px",
+    border: "1px solid #1e293b",
+    borderRadius: "8px",
+    overflow: "hidden",
+    backgroundColor: "#0f172a",
+    color: "#e2e8f0"
+  },
+  ".cm-scroller": {
+    minHeight: "300px",
+    fontFamily: "\"JetBrains Mono\", \"SFMono-Regular\", Consolas, monospace",
+    fontSize: "14px",
+    lineHeight: "1.55"
+  },
+  ".cm-content": {
+    padding: "16px"
+  },
+  ".cm-gutters": {
+    backgroundColor: "#111827",
+    color: "#94a3b8",
+    borderRight: "1px solid #1e293b"
+  },
+  ".cm-activeLine": {
+    backgroundColor: "#172554"
+  },
+  ".cm-activeLineGutter": {
+    backgroundColor: "#172554"
+  },
+  ".cm-cursor": {
+    borderLeftColor: "#bfdbfe"
+  },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+    backgroundColor: "#1d4ed8"
+  }
+}, { dark: true });
 
 const defaultRaw = `@suite
 title=Imported Mixed Practice
@@ -1007,7 +1050,7 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
     return (
       <>
         <div className="panel-heading"><div><h3>{props.question.title}</h3><p>{props.question.description || props.selectedProblem?.statement}</p></div><select value={props.language} onChange={(event) => props.onLanguage(event.target.value as Language)}>{languages.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-        <textarea className="editor" value={props.sourceCode} spellCheck={false} onChange={(event) => props.onSourceCode(event.target.value)} />
+        <CodeEditor language={props.language} value={props.sourceCode} onChange={props.onSourceCode} />
         <div className="actions"><button onClick={props.onSubmitCode} disabled={props.isSubmitting || !props.selectedProblem}>{props.isSubmitting ? "Running..." : "Run Code"}</button><button className="secondary" onClick={props.onRefresh}>Refresh</button></div>
         <ResultList submissions={props.submissions} />
       </>
@@ -1025,6 +1068,37 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
       {props.feedback && props.feedbackMode === "instant" && <div className="notice">{props.feedback}</div>}
       {showAnswer && <AnswerReveal question={props.question} />}
     </>
+  );
+}
+
+function CodeEditor({ language, value, onChange }: { language: Language; value: string; onChange: (value: string) => void }) {
+  const extensions = useMemo(() => {
+    switch (language) {
+      case "python":
+        return [python()];
+      case "typescript":
+        return [javascript({ typescript: true })];
+      case "javascript":
+        return [javascript()];
+      case "java":
+        return [java()];
+      case "csharp":
+        return [csharp()];
+      default:
+        return [];
+    }
+  }, [language]);
+
+  return (
+    <CodeMirror
+      className="code-editor"
+      value={value}
+      height="300px"
+      theme={codeEditorTheme}
+      extensions={extensions}
+      basicSetup={{ foldGutter: true, lineNumbers: true, highlightActiveLine: true }}
+      onChange={onChange}
+    />
   );
 }
 

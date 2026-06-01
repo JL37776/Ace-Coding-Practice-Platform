@@ -18,17 +18,28 @@ const workRoot = process.env.RUNNER_WORK_ROOT || tmpdir();
 const maxBytes = Number(process.env.RUNNER_MAX_OUTPUT_BYTES || 8000);
 const commandTimeoutMs = Number(process.env.RUNNER_TIMEOUT_MS || 6000);
 
-const pythonCommands = process.platform === "win32"
-  ? [["python", "--version"], ["py", "-3", "--version"]]
-  : [["python3", "--version"], ["python", "--version"]];
+interface RuntimeCommand {
+  probe: string[];
+  run: string[];
+}
 
-const languageCommands: Record<Language, string[][]> = {
+const pythonCommands: RuntimeCommand[] = process.platform === "win32"
+  ? [
+      { probe: ["python", "--version"], run: ["python"] },
+      { probe: ["py", "-3", "--version"], run: ["py", "-3"] }
+    ]
+  : [
+      { probe: ["python3", "--version"], run: ["python3"] },
+      { probe: ["python", "--version"], run: ["python"] }
+    ];
+
+const languageCommands: Record<Language, RuntimeCommand[]> = {
   python: pythonCommands,
-  javascript: [["node", "--version"]],
-  typescript: [["node", "--version"]],
-  sql: [["sqlite3", "--version"]],
-  csharp: [["dotnet", "--version"]],
-  java: [["javac", "-version"]]
+  javascript: [{ probe: ["node", "--version"], run: ["node"] }],
+  typescript: [{ probe: ["node", "--version"], run: ["node"] }],
+  sql: [{ probe: ["sqlite3", "--version"], run: ["sqlite3"] }],
+  csharp: [{ probe: ["dotnet", "--version"], run: ["dotnet"] }],
+  java: [{ probe: ["javac", "-version"], run: ["javac"] }]
 };
 
 const runtimeCommands = new Map<Language, string[]>();
@@ -60,11 +71,11 @@ while (true) {
 
 async function detectSupportedLanguages(): Promise<Language[]> {
   const results: Language[] = [];
-  for (const [language, commands] of Object.entries(languageCommands) as Array<[Language, string[][]]>) {
+  for (const [language, commands] of Object.entries(languageCommands) as Array<[Language, RuntimeCommand[]]>) {
     for (const command of commands) {
-      const result = await run(command[0], command.slice(1), { timeoutMs: 2500 });
+      const result = await run(command.probe[0], command.probe.slice(1), { timeoutMs: 2500 });
       if (result.status === "accepted") {
-        runtimeCommands.set(language, command);
+        runtimeCommands.set(language, command.run);
         results.push(language);
         break;
       }
@@ -257,7 +268,16 @@ async function judgeJava(job: JudgeJob, workdir: string, started: number): Promi
 function normalizeHarnessResult(output: ProcessOutput, started: number): JudgeResult {
   if (output.status !== "accepted") return { ...output, durationMs: Date.now() - started, testcaseResults: [] };
   try {
-    const parsed = JSON.parse(output.stdout) as JudgeResult;
+    const stdoutLines = output.stdout.trim().split(/\r?\n/);
+    let jsonLine = "";
+    for (let index = stdoutLines.length - 1; index >= 0; index -= 1) {
+      const line = stdoutLines[index].trim();
+      if (line.startsWith("{")) {
+        jsonLine = line;
+        break;
+      }
+    }
+    const parsed = JSON.parse(jsonLine || output.stdout) as JudgeResult;
     return {
       status: parsed.status,
       stdout: parsed.stdout || "",
