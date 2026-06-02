@@ -24,6 +24,30 @@ const starterCode = {
 
 const languages: Language[] = ["python", "typescript", "javascript", "csharp", "java"];
 
+function getStarterCode(language: Language, problem?: Problem) {
+  const signatureMap = problem?.configJson.signature && typeof problem.configJson.signature === "object"
+    ? problem.configJson.signature as Partial<Record<Language, string>>
+    : undefined;
+  const signature = signatureMap?.[language];
+  if (!signature) {
+    const comment = language === "python" ? "#" : "//";
+    return problem ? starterCode[language] : `${comment} Runner problem is not configured for this question yet.\n${comment} Select a coding question with a valid problemId to run code.`;
+  }
+  switch (language) {
+    case "python":
+      return `${signature}\n    pass`;
+    case "typescript":
+    case "javascript":
+      return signature.includes("{") ? signature : `${signature} {\n  // TODO\n}`;
+    case "csharp":
+      return `public class Solution\n{\n    ${signature}\n    {\n        // TODO\n    }\n}`;
+    case "java":
+      return `public class Solution {\n  ${signature} {\n    // TODO\n  }\n}`;
+    default:
+      return starterCode[language];
+  }
+}
+
 const codeEditorTheme = EditorView.theme({
   "&": {
     minHeight: "300px",
@@ -204,7 +228,7 @@ export default function App() {
   const currentQuestion = activeQuestions[questionIndex];
   const codingQuestion = currentQuestion?.type === "coding" ? currentQuestion : undefined;
   const selectedProblem = useMemo(
-    () => problems.find((problem) => problem.id === codingQuestion?.problemId) || problems[0],
+    () => problems.find((problem) => problem.id === codingQuestion?.problemId),
     [codingQuestion, problems]
   );
 
@@ -213,8 +237,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    setSourceCode(starterCode[language]);
-  }, [language]);
+    if (!codingQuestion) return;
+    setSourceCode(getStarterCode(language, selectedProblem));
+  }, [codingQuestion?.id, language, selectedProblem?.id]);
 
   useEffect(() => {
     if (!user) return;
@@ -595,7 +620,7 @@ export default function App() {
           <p className="eyebrow">Ace Practice</p>
           <h1>Login to your training space</h1>
           <p className="muted">Admin manages public question banks. Members can keep personal question banks.</p>
-          <label>Account<input value={authForm.username} onChange={(event) => setAuthForm({ ...authForm, username: event.target.value })} /></label>
+          <label>Email<input type="email" autoComplete="email" value={authForm.username} onChange={(event) => setAuthForm({ ...authForm, username: event.target.value })} /></label>
           {authMode === "register" && <label>Display name<input value={authForm.displayName} onChange={(event) => setAuthForm({ ...authForm, displayName: event.target.value })} /></label>}
           <label>Password<input type="password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} /></label>
           {authError && <pre className="error-box">{authError}</pre>}
@@ -1234,6 +1259,7 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
     return (
       <>
         <div className="panel-heading"><div><h3>{props.question.title}</h3><p>{props.question.description || props.selectedProblem?.statement}</p></div><select value={props.language} onChange={(event) => props.onLanguage(event.target.value as Language)}>{languages.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+        {!props.selectedProblem && <div className="notice">Runner problem is not configured for this coding question yet.</div>}
         <div className="coding-workbench">
           <div className="coding-editor-pane">
             <CodeEditor language={props.language} value={props.sourceCode} onChange={props.onSourceCode} />

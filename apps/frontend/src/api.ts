@@ -36,12 +36,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers || {})
     }
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) throw new Error(await formatApiError(response));
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   if (!text) return undefined as T;
   const payload = JSON.parse(text) as ApiEnvelope<T>;
   return payload.data;
+}
+
+async function formatApiError(response: Response) {
+  const text = await response.text();
+  if (!text) return `Request failed (${response.status})`;
+  try {
+    const payload = JSON.parse(text) as { error?: string; details?: unknown };
+    if (payload.error === "Invalid request" && payload.details) {
+      const flattened = payload.details as { fieldErrors?: Record<string, string[]> };
+      const fieldMessages = Object.entries(flattened.fieldErrors || {})
+        .flatMap(([field, messages]) => messages.map((message) => `${field}: ${message}`));
+      if (fieldMessages.length) return fieldMessages.join("\n");
+    }
+    return payload.error || text;
+  } catch {
+    return text;
+  }
 }
 
 export const api = {
