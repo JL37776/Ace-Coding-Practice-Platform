@@ -548,6 +548,7 @@ function questionFromFields(fields: Record<string, string>, scope: BankScope, us
   const options = ["A", "B", "C", "D", "E", "F"]
     .filter((id) => fields[id])
     .map((id) => ({ id, text: fields[id] }));
+  const code = fields.code ? fields.code.replace(/\\n/g, "\n") : undefined;
   return {
     id: randomUUID(),
     scope,
@@ -563,7 +564,7 @@ function questionFromFields(fields: Record<string, string>, scope: BankScope, us
     answer: parseAnswer(fields.answer || fields.ans, type),
     explanation: fields.explanation || "",
     problemId: fields.problemId,
-    metadata: {}
+    metadata: code ? { code, codeLanguage: fields.codeLang || fields.language || "text" } : {}
   };
 }
 

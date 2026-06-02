@@ -455,13 +455,16 @@ function makeReinforcementQuestion(profile: { tag: string; label: string; focus:
       explanation: "Clear boundaries reduce coupling and make behavior easier to verify."
     },
     {
-      title: `${profile.label} reinforcement ${index}: Which answer best describes maintainable production code?`,
-      options: ["Readable, tested, observable and scoped to real requirements", "Clever but undocumented", "Large functions with hidden side effects", "Only works on one sample"],
+      title: `${profile.label} reinforcement ${index}: What is the main issue in this snippet?`,
+      codeLanguage: profile.tag,
+      code: `function calculate(items) {\\n  return items.map(x => x.value).reduce((a, b) => a + b);\\n}`,
+      options: ["It can throw on an empty list because reduce has no initial value", "map cannot return numbers", "The function must be async", "The variable names are too short to compile"],
       answer: "A",
-      explanation: "Production code should be understandable, verifiable and diagnosable."
+      explanation: "Calling reduce without an initial value fails when the array is empty."
     }
   ];
   const variant = variants[(index - 1) % variants.length];
+  const metadata = variant.code ? { code: variant.code.replace(/\\n/g, "\n"), codeLanguage: variant.codeLanguage } : {};
   return {
     id: "",
     scope: "public",
@@ -474,7 +477,7 @@ function makeReinforcementQuestion(profile: { tag: string; label: string; focus:
     options: variant.options.map((text, optionIndex) => ({ id: String.fromCharCode(65 + optionIndex), text })),
     answer: variant.answer,
     explanation: variant.explanation,
-    metadata: {}
+    metadata
   };
 }
 
@@ -492,6 +495,7 @@ function parseSeedFields(block: string) {
 function seedQuestionFromFields(fields: Record<string, string>): Question {
   const type = normalizeSeedQuestionType(fields.type);
   const options = ["A", "B", "C", "D", "E", "F"].filter((id) => fields[id]).map((id) => ({ id, text: fields[id] }));
+  const code = fields.code ? fields.code.replace(/\\n/g, "\n") : undefined;
   return {
     id: "",
     scope: "public",
@@ -506,7 +510,7 @@ function seedQuestionFromFields(fields: Record<string, string>): Question {
     answer: parseSeedAnswer(fields.answer || fields.ans, type),
     explanation: fields.explanation || "",
     problemId: fields.problemId,
-    metadata: {}
+    metadata: code ? { code, codeLanguage: fields.codeLang || fields.language || "text" } : {}
   };
 }
 

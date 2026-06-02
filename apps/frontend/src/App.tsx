@@ -92,13 +92,15 @@ duration=15
 
 @q
 type=single
-title=Which principle means one class should have one reason to change?
-A=Single Responsibility Principle
-B=Open Closed Principle
-C=Dependency Inversion Principle
+title=What happens when this JavaScript runs?
+codeLang=javascript
+code=const items = [];\\nconst total = items.reduce((sum, item) => sum + item.value);
+A=It throws because reduce has no initial value
+B=It returns 0
+C=It returns undefined
 answer=A
-explanation=SRP keeps a class focused on one responsibility.
-tags=oop,solid
+explanation=Array.prototype.reduce needs an initial value when the array can be empty.
+tags=javascript,array
 
 @q
 type=boolean
@@ -126,6 +128,20 @@ C=Dependency Inversion Principle
 answer=A
 explanation=SRP keeps a class focused on one responsibility.
 tags=oop,solid
+
+Code-choice example (question stem + code area + choices):
+@q
+type=single
+title=What is the main bug in this snippet?
+codeLang=javascript
+code=const items = [];\\nconst total = items.reduce((sum, item) => sum + item.value);
+A=It can throw because reduce has no initial value
+B=map must be called before reduce
+C=const cannot store numbers
+D=The array syntax is invalid
+answer=A
+explanation=Calling reduce without an initial value fails on an empty array.
+tags=javascript,array,debugging
 
 Multiple-choice example (multiple correct answers):
 @q
@@ -1123,11 +1139,11 @@ function StudyDashboardPanel(props: {
       </div>
       <div className="study-actions">
         <button onClick={props.onStartPractice} disabled={!props.questionCount}>
-          <span>{progressCount ? "Continue Practice" : "Practice Mode"}</span>
+          <span>{progressCount ? "Continue Practice" : "Practice"}</span>
           <small>{progressCount ? `${progressCount} saved answers` : `Selected: ${props.selectedSuiteTitle || "no suite"}`}</small>
         </button>
         <button className="exam-action" onClick={props.onStartExam} disabled={!props.questionCount}>
-          <span>Exam Mode</span>
+          <span>Exam</span>
           <small>Finish all questions to record</small>
         </button>
       </div>
@@ -1274,6 +1290,7 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
     <>
       <h3>{props.question.title}</h3>
       {props.question.description && <p>{props.question.description}</p>}
+      <QuestionCodeBlock question={props.question} />
       {props.question.type === "single" && <OptionList question={props.question} value={value as string | undefined} onAnswer={props.onAnswer} />}
       {props.question.type === "multiple" && <MultiOptionList question={props.question} value={(value as string[] | undefined) || []} onAnswer={props.onAnswer} />}
       {props.question.type === "boolean" && <div className="choice-list"><button className={value === true ? "selected" : ""} onClick={() => props.onAnswer(props.question.id, true)}>True</button><button className={value === false ? "selected" : ""} onClick={() => props.onAnswer(props.question.id, false)}>False</button></div>}
@@ -1283,6 +1300,18 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
       {props.feedback && props.feedbackMode === "final" && <div className="notice">{props.feedback}</div>}
       {showAnswer && <AnswerReveal question={props.question} />}
     </>
+  );
+}
+
+function QuestionCodeBlock({ question }: { question: Question }) {
+  const code = typeof question.metadata.code === "string" ? question.metadata.code : "";
+  const language = typeof question.metadata.codeLanguage === "string" ? question.metadata.codeLanguage : "code";
+  if (!code) return null;
+  return (
+    <figure className="question-code-block">
+      <figcaption>{language}</figcaption>
+      <pre>{code}</pre>
+    </figure>
   );
 }
 
