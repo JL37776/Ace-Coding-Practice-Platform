@@ -565,6 +565,25 @@ export default function App() {
         await recordCompletedQuestions([currentQuestion.id]);
       }
       window.setTimeout(() => void refreshSubmissions(), 700);
+    } catch (error) {
+      const now = new Date().toISOString();
+      setSubmissions((items) => [{
+        id: `local-error-${Date.now()}`,
+        userId: user?.id || "local",
+        problemId: selectedProblem.id,
+        language,
+        sourceCode,
+        status: "system_error",
+        result: {
+          status: "system_error",
+          stdout: "",
+          stderr: error instanceof Error ? error.message : "Run failed",
+          durationMs: 0,
+          testcaseResults: []
+        },
+        createdAt: now,
+        updatedAt: now
+      }, ...items]);
     } finally {
       setIsSubmitting(false);
     }

@@ -392,6 +392,10 @@ export function createApiRouter() {
       const payload = createSubmissionSchema.parse(req.body);
       const problem = store.getProblem(payload.problemId, req.user);
       if (!problem) return res.status(404).json({ error: "Problem not found" });
+      const testCases = store.listTestCases(problem.id);
+      if (!testCases.length) {
+        return res.status(422).json({ error: "Runner tests are not configured for this coding problem yet." });
+      }
 
       const now = new Date().toISOString();
       const submission: Submission = {
@@ -416,7 +420,7 @@ export function createApiRouter() {
         try {
           const result = await judgeProvider.enqueue({
             submission: running,
-            testCases: store.listTestCases(problem.id)
+            testCases
           });
           store.saveSubmission({
             ...running,

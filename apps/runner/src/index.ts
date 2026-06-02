@@ -106,6 +106,15 @@ async function postResult(submissionId: string, result: JudgeResult) {
 
 async function judge(job: JudgeJob): Promise<JudgeResult> {
   const started = Date.now();
+  if (job.testCases.length === 0) {
+    return {
+      status: "system_error",
+      stdout: "",
+      stderr: "Runner tests are not configured for this coding problem.",
+      durationMs: Date.now() - started,
+      testcaseResults: []
+    };
+  }
   const workdir = await mkdtemp(join(workRoot, `ace-runner-${job.submission.id}-`));
   try {
     switch (job.submission.language) {
