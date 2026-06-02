@@ -354,6 +354,7 @@ export const testCases: TestCase[] = [
 ];
 
 loadExpandedQuestionBank();
+ensureCodingProblems();
 
 function loadExpandedQuestionBank() {
   const rootDir = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -382,6 +383,45 @@ function loadExpandedQuestionBank() {
     parsed.suite.total = parsed.questions.length;
     suites.push({ ...parsed.suite, id: suiteId, topicId });
     questions.push(...parsed.questions.map((question, index) => ({ ...question, id: `${suiteId}-q${index + 1}`, suiteId })));
+  }
+}
+
+function ensureCodingProblems() {
+  for (const question of questions) {
+    if (question.type !== "coding" || !question.problemId || problems.some((problem) => problem.id === question.problemId)) continue;
+    const functionName = camelName(question.title);
+    problems.push({
+      id: question.problemId,
+      scope: "public",
+      title: question.title,
+      slug: question.problemId,
+      type: "coding",
+      difficulty: question.difficulty,
+      tags: question.tags.length ? question.tags : ["coding"],
+      statement: question.description || question.title,
+      configJson: {
+        functionName,
+        entrypoint: {
+          python: snakeName(question.title),
+          typescript: functionName,
+          javascript: functionName,
+          csharp: pascalName(question.title),
+          java: functionName
+        },
+        signature: {
+          python: `def ${snakeName(question.title)}(*args):`,
+          typescript: `function ${functionName}(...args: unknown[]): unknown`,
+          javascript: `function ${functionName}(...args)`,
+          csharp: `public object ${pascalName(question.title)}(params object[] args)`,
+          java: `public Object ${functionName}(Object... args)`
+        },
+        checker: "exact",
+        timeLimitMs: 5000,
+        memoryLimitMb: 128
+      },
+      version: 1,
+      published: true
+    });
   }
 }
 
@@ -528,4 +568,21 @@ function parseSeedAnswer(value: string | undefined, type: QuestionType) {
 
 function slugId(prefix: string, value: string) {
   return `${prefix}-${value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
+
+function words(value: string) {
+  return value.toLowerCase().match(/[a-z0-9]+/g) || ["solve"];
+}
+
+function camelName(value: string) {
+  const parts = words(value);
+  return parts[0] + parts.slice(1).map((part) => part[0].toUpperCase() + part.slice(1)).join("");
+}
+
+function pascalName(value: string) {
+  return words(value).map((part) => part[0].toUpperCase() + part.slice(1)).join("");
+}
+
+function snakeName(value: string) {
+  return words(value).join("_");
 }

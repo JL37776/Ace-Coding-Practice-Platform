@@ -947,7 +947,7 @@ p {
 
 .practice-card {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: minmax(0, 1fr) auto;
   align-content: start;
   padding: 18px 24px;
   border: 1px solid #e5e7eb;
@@ -958,13 +958,20 @@ p {
   min-height: 0;
 }
 
-.practice-card > .panel-heading,
-.practice-card > .coding-workbench,
-.practice-card > .choice-list,
-.practice-card > .answer-input,
-.practice-card > .actions,
-.practice-card > .notice,
-.practice-card > .answer-reveal {
+.question-content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.question-content > .panel-heading,
+.question-content > .coding-workbench,
+.question-content > .choice-list,
+.question-content > .answer-input,
+.question-content > .actions,
+.question-content > .notice,
+.question-content > .answer-reveal {
   min-width: 0;
 }
 
@@ -986,15 +993,16 @@ p {
 .question-code-block {
   margin: 10px 0 12px;
   overflow: hidden;
-  border: 1px solid #1e293b;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  background: #0f172a;
+  background: white;
 }
 
 .question-code-block figcaption {
   padding: 6px 10px;
-  border-bottom: 1px solid #1e293b;
-  color: #93c5fd;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #2563eb;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -1005,7 +1013,7 @@ p {
   margin: 0;
   overflow-x: auto;
   padding: 12px;
-  color: #e2e8f0;
+  color: #172033;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 13px;
   line-height: 1.55;
@@ -1561,7 +1569,7 @@ p {
   }
 
   .practice-layout {
-    height: auto;
+    height: 100%;
     min-height: 0;
     grid-template-rows: auto minmax(0, 1fr);
     gap: 8px;
@@ -1592,7 +1600,7 @@ p {
 
   .practice-card {
     padding: 12px;
-    overflow-y: auto;
+    overflow: hidden;
   }
 
   .practice-card h3 {
@@ -1605,7 +1613,7 @@ p {
   }
 
   .coding-editor-pane {
-    grid-template-rows: minmax(220px, 44dvh) auto;
+    grid-template-rows: minmax(180px, 34dvh) auto;
   }
 
   .coding-workbench .submission-list {

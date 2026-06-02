@@ -24,15 +24,11 @@ const starterCode = {
 
 const languages: Language[] = ["python", "typescript", "javascript", "csharp", "java"];
 
-function getStarterCode(language: Language, problem?: Problem) {
+function getStarterCode(language: Language, problem?: Problem, question?: Question) {
   const signatureMap = problem?.configJson.signature && typeof problem.configJson.signature === "object"
     ? problem.configJson.signature as Partial<Record<Language, string>>
     : undefined;
-  const signature = signatureMap?.[language];
-  if (!signature) {
-    const comment = language === "python" ? "#" : "//";
-    return problem ? starterCode[language] : `${comment} Runner problem is not configured for this question yet.\n${comment} Select a coding question with a valid problemId to run code.`;
-  }
+  const signature = signatureMap?.[language] || inferSignature(language, question?.title || problem?.title || "Solve");
   switch (language) {
     case "python":
       return `${signature}\n    pass`;
@@ -48,14 +44,49 @@ function getStarterCode(language: Language, problem?: Problem) {
   }
 }
 
+function inferSignature(language: Language, title: string) {
+  const camel = camelName(title);
+  switch (language) {
+    case "python":
+      return `def ${snakeName(title)}(*args):`;
+    case "typescript":
+      return `function ${camel}(...args: unknown[]): unknown`;
+    case "javascript":
+      return `function ${camel}(...args)`;
+    case "csharp":
+      return `public object ${pascalName(title)}(params object[] args)`;
+    case "java":
+      return `public Object ${camel}(Object... args)`;
+    default:
+      return "solve";
+  }
+}
+
+function titleWords(value: string) {
+  return value.toLowerCase().match(/[a-z0-9]+/g) || ["solve"];
+}
+
+function camelName(value: string) {
+  const parts = titleWords(value);
+  return parts[0] + parts.slice(1).map((part) => part[0].toUpperCase() + part.slice(1)).join("");
+}
+
+function pascalName(value: string) {
+  return titleWords(value).map((part) => part[0].toUpperCase() + part.slice(1)).join("");
+}
+
+function snakeName(value: string) {
+  return titleWords(value).join("_");
+}
+
 const codeEditorTheme = EditorView.theme({
   "&": {
     minHeight: "300px",
-    border: "1px solid #1e293b",
+    border: "1px solid #cbd5e1",
     borderRadius: "8px",
     overflow: "hidden",
-    backgroundColor: "#0f172a",
-    color: "#e2e8f0"
+    backgroundColor: "#ffffff",
+    color: "#172033"
   },
   ".cm-scroller": {
     minHeight: "300px",
@@ -67,23 +98,23 @@ const codeEditorTheme = EditorView.theme({
     padding: "16px"
   },
   ".cm-gutters": {
-    backgroundColor: "#111827",
-    color: "#94a3b8",
-    borderRight: "1px solid #1e293b"
+    backgroundColor: "#f8fafc",
+    color: "#64748b",
+    borderRight: "1px solid #e2e8f0"
   },
   ".cm-activeLine": {
-    backgroundColor: "#172554"
+    backgroundColor: "#eff6ff"
   },
   ".cm-activeLineGutter": {
-    backgroundColor: "#172554"
+    backgroundColor: "#dbeafe"
   },
   ".cm-cursor": {
-    borderLeftColor: "#bfdbfe"
+    borderLeftColor: "#2563eb"
   },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-    backgroundColor: "#1d4ed8"
+    backgroundColor: "#bfdbfe"
   }
-}, { dark: true });
+});
 
 const defaultRaw = `@suite
 title=Imported Mixed Practice
@@ -254,7 +285,7 @@ export default function App() {
 
   useEffect(() => {
     if (!codingQuestion) return;
-    setSourceCode(getStarterCode(language, selectedProblem));
+    setSourceCode(getStarterCode(language, selectedProblem, codingQuestion));
   }, [codingQuestion?.id, language, selectedProblem?.id]);
 
   useEffect(() => {
@@ -1227,7 +1258,9 @@ function PracticePanel(props: {
           })}
         </aside>
         <section className="panel practice-card">
-          {question ? <QuestionRenderer {...props} question={question} /> : <div className="empty-state">This suite has no questions yet.</div>}
+          <div className="question-content">
+            {question ? <QuestionRenderer {...props} question={question} /> : <div className="empty-state">This suite has no questions yet.</div>}
+          </div>
           <div className="practice-footer">
             <button className="secondary" disabled={props.questionIndex === 0} onClick={() => props.onQuestionIndex(props.questionIndex - 1)}>Previous</button>
             <span>Question {props.questionIndex + 1} of {props.questions.length || 0}</span>
@@ -1275,7 +1308,7 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
     return (
       <>
         <div className="panel-heading"><div><h3>{props.question.title}</h3><p>{props.question.description || props.selectedProblem?.statement}</p></div><select value={props.language} onChange={(event) => props.onLanguage(event.target.value as Language)}>{languages.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-        {!props.selectedProblem && <div className="notice">Runner problem is not configured for this coding question yet.</div>}
+        {!props.selectedProblem && <div className="notice">Starter template is ready. Runner tests for this problem are not configured yet.</div>}
         <div className="coding-workbench">
           <div className="coding-editor-pane">
             <CodeEditor language={props.language} value={props.sourceCode} onChange={props.onSourceCode} />
