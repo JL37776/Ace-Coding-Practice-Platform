@@ -505,12 +505,14 @@ function isRunnerAuthorized(authorization: string | undefined) {
 
 function parseTopicRaw(raw: string, scope: BankScope, topicId: string, user: User) {
   const blocks = raw
-    .split(/\n(?=@(?:suite|q)\b)/i)
+    .split(/\n(?=@(?:suite|outline|doc|q)\b)/i)
     .map((block) => block.trim())
     .filter(Boolean);
   const suiteBlock = blocks.find((block) => block.toLowerCase().startsWith("@suite"));
+  const outlineBlock = blocks.find((block) => /^@(?:outline|doc)\b/i.test(block));
   const questionBlocks = blocks.filter((block) => block.toLowerCase().startsWith("@q"));
   const suiteFields = parseFields(suiteBlock || "");
+  const outlineMarkdown = parseMarkdownBlock(outlineBlock);
   const questions = questionBlocks.map((block) => questionFromFields(parseFields(block), scope, user));
   const allowedTypes = Array.from(new Set(questions.map((question) => question.type))) as QuestionType[];
   const durationMinutes = Number(suiteFields.duration || 15);
@@ -530,9 +532,19 @@ function parseTopicRaw(raw: string, scope: BankScope, topicId: string, user: Use
     done: 0,
     total: questions.length,
     allowedTypes: allowedTypes.length ? allowedTypes : ["single"],
-    feedbackMode: suiteFields.feedbackMode === "final" ? "final" : "instant"
+    feedbackMode: suiteFields.feedbackMode === "final" ? "final" : "instant",
+    metadata: outlineMarkdown ? { outlineMarkdown } : {}
   };
   return { suite, questions };
+}
+
+function parseMarkdownBlock(block?: string) {
+  if (!block) return "";
+  return block
+    .split(/\r?\n/)
+    .slice(1)
+    .join("\n")
+    .trim();
 }
 
 function parseFields(block: string) {

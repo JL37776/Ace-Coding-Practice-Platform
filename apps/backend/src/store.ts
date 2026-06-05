@@ -114,6 +114,7 @@ export const store = {
     suite.total = replacementQuestions.length;
     suite.allowedTypes = replacement.allowedTypes;
     suite.feedbackMode = replacement.feedbackMode;
+    suite.metadata = replacement.metadata;
 
     for (let i = questions.length - 1; i >= 0; i--) {
       if (questions[i].suiteId === id) {

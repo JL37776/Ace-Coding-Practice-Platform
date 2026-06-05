@@ -121,6 +121,13 @@ title=Imported Mixed Practice
 description=Paste a whole suite here. Then set time, validate, confirm overwrite, and practice.
 duration=15
 
+@outline
+## Learning Outline
+- Core idea: what this suite is training
+- Key terms: concepts learners should recognize
+- Common traps: mistakes the questions should expose
+- Source notes: optional links or lesson notes
+
 @q
 type=single
 title=What happens when this JavaScript runs?
@@ -148,6 +155,8 @@ Rules:
 - Supported question types only: single, multiple, boolean, blank, coding.
 - Use a balanced mix unless the user asks for only one type.
 - Every non-coding question must include answer= and explanation=.
+- Include an optional @outline block after @suite when the suite is based on a lesson, article, or learning path page.
+- The @outline block is Markdown. Use it for the source content outline, learning objectives, key terms, and common traps.
 
 Single-choice example (exactly one correct answer):
 @q
@@ -216,6 +225,14 @@ title=<suite title>
 description=<what this suite trains>
 duration=<minutes>
 
+@outline
+## Source Outline
+- Learning objective:
+- Key concepts:
+- Important distinctions:
+- Common mistakes:
+- Source notes:
+
 @q
 type=<single|multiple|boolean|blank|coding>
 title=<question>
@@ -264,6 +281,7 @@ export default function App() {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [modalOpen, setModalOpen] = useState<"topic" | "suite" | null>(null);
   const [modalScope, setModalScope] = useState<BankScope>("public");
+  const [modalParentTopic, setModalParentTopic] = useState<TopicNode | null>(null);
   const [questionResults, setQuestionResults] = useState<Record<string, "correct" | "incorrect">>({});
 
   const publicTopics = topics.filter((topic) => topic.scope === "public");
@@ -420,12 +438,13 @@ export default function App() {
     }
   }
 
-  async function addTopic(targetScope: BankScope) {
+  async function addTopic(targetScope: BankScope, parentTopic?: TopicNode | null) {
     const name = newTopicName[targetScope].trim();
     if (!name) return;
     try {
-      const topic = await api.createTopic({ scope: targetScope, name });
+      const topic = await api.createTopic({ scope: targetScope, name, parentId: parentTopic?.id });
       setNewTopicName({ ...newTopicName, [targetScope]: "" });
+      if (parentTopic) setOpenTopics({ ...openTopics, [parentTopic.id]: true });
       selectTopic(targetScope, topic.id);
       await refreshWorkspace({ scope: targetScope, topicId: topic.id, suiteId: "" });
     } catch (error) {
@@ -767,7 +786,7 @@ export default function App() {
           onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, public: value })}
           onAddTopic={() => void addTopic("public")}
           onAddSuite={() => void addSuite("public")}
-          onOpenModal={(type, scope) => { setModalOpen(type); setModalScope(scope); }}
+          onOpenModal={(type, scope, parentTopic) => { setModalOpen(type); setModalScope(scope); setModalParentTopic(parentTopic || null); }}
           onDeleteTopic={deleteTopic}
           onDeleteSuite={deleteSuite}
         />
@@ -799,7 +818,7 @@ export default function App() {
           onSuiteTitle={(value) => setNewSuiteTitle({ ...newSuiteTitle, personal: value })}
           onAddTopic={() => void addTopic("personal")}
           onAddSuite={() => void addSuite("personal")}
-          onOpenModal={(type, scope) => { setModalOpen(type); setModalScope(scope); }}
+          onOpenModal={(type, scope, parentTopic) => { setModalOpen(type); setModalScope(scope); setModalParentTopic(parentTopic || null); }}
           onDeleteTopic={deleteTopic}
           onDeleteSuite={deleteSuite}
         />
@@ -858,6 +877,7 @@ export default function App() {
       <AddItemModal
         type={modalOpen || "topic"}
         scope={modalScope}
+        parentTopic={modalOpen === "topic" ? modalParentTopic : null}
         open={modalOpen !== null}
         value={modalOpen === "topic" ? newTopicName[modalScope] : newSuiteTitle[modalScope]}
         onValue={(value) => {
@@ -869,16 +889,18 @@ export default function App() {
         }}
         onAdd={async () => {
           if (modalOpen === "topic") {
-            await addTopic(modalScope);
+            await addTopic(modalScope, modalParentTopic);
           } else {
             await addSuite(modalScope);
           }
           setModalOpen(null);
+          setModalParentTopic(null);
           setNewTopicName({ ...newTopicName, [modalScope]: "" });
           setNewSuiteTitle({ ...newSuiteTitle, [modalScope]: "" });
         }}
         onClose={() => {
           setModalOpen(null);
+          setModalParentTopic(null);
           setNewTopicName({ ...newTopicName, [modalScope]: "" });
           setNewSuiteTitle({ ...newSuiteTitle, [modalScope]: "" });
         }}
@@ -890,6 +912,7 @@ export default function App() {
 function AddItemModal(props: {
   type: "topic" | "suite";
   scope: BankScope;
+  parentTopic?: TopicNode | null;
   open: boolean;
   value: string;
   onValue: (value: string) => void;
@@ -899,12 +922,13 @@ function AddItemModal(props: {
   if (!props.open) return null;
   
   const placeholder = props.type === "topic" ? "New topic name" : "New suite title";
-  const title = props.type === "topic" ? "Add Topic" : "Add Suite";
+  const title = props.type === "topic" ? (props.parentTopic ? "Add Child Topic" : "Add Topic") : "Add Suite";
   
   return (
     <div className="modal-overlay" onClick={props.onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <h3>{title}</h3>
+        {props.parentTopic && <p className="modal-context">Under {props.parentTopic.name}</p>}
         <input
           placeholder={placeholder}
           value={props.value}
@@ -943,7 +967,7 @@ function BankPanel(props: {
   onSuiteTitle: (value: string) => void;
   onAddTopic: () => void;
   onAddSuite: () => void;
-  onOpenModal: (type: "topic" | "suite", scope: BankScope) => void;
+  onOpenModal: (type: "topic" | "suite", scope: BankScope, parentTopic?: TopicNode) => void;
   onDeleteTopic?: (id: string) => void;
   onDeleteSuite?: (id: string) => void;
 }) {
@@ -972,6 +996,8 @@ function BankPanel(props: {
                 onSelectTopic={props.onSelectTopic}
                 onSelectFolder={props.onSelectFolder}
                 onSelectSuite={props.onSelectSuite}
+                onAddChildTopic={(topic) => props.onOpenModal("topic", props.scope, topic)}
+                canAddChildTopic={!disabled}
                 onDeleteTopic={props.onDeleteTopic}
                 onDeleteSuite={props.onDeleteSuite}
                 depth={0}
@@ -999,6 +1025,8 @@ function TopicNodeView(props: {
   onSelectTopic: (scope: BankScope, id: string) => void;
   onSelectFolder: (scope: BankScope, topic: TopicNode) => void;
   onSelectSuite: (id: string) => void;
+  onAddChildTopic: (topic: TopicNode) => void;
+  canAddChildTopic: boolean;
   onDeleteTopic?: (id: string) => void;
   onDeleteSuite?: (id: string) => void;
   depth: number;
@@ -1018,6 +1046,9 @@ function TopicNodeView(props: {
           <strong>{props.topic.name}</strong>
           <span>{props.topic.total ? `${props.topic.scorePercent}% (${props.topic.done}/${props.topic.total})` : `${nestedSuiteCount} suites`}</span>
         </button>
+        {props.canAddChildTopic && (
+          <button className="topic-action-button" onClick={() => props.onAddChildTopic(props.topic)} title={`Add child topic under ${props.topic.name}`} aria-label={`Add child topic under ${props.topic.name}`}>+</button>
+        )}
       </div>
       {open && (
         <div className="child-topic">
@@ -1034,6 +1065,8 @@ function TopicNodeView(props: {
               onSelectTopic={props.onSelectTopic}
               onSelectFolder={props.onSelectFolder}
               onSelectSuite={props.onSelectSuite}
+              onAddChildTopic={props.onAddChildTopic}
+              canAddChildTopic={props.canAddChildTopic}
               onDeleteTopic={props.onDeleteTopic}
               onDeleteSuite={props.onDeleteSuite}
               depth={props.depth + 1}
@@ -1081,6 +1114,9 @@ function SuiteConfig(props: {
   onSaveEdit: () => void;
   onDeleteSuite: (id: string) => void;
 }) {
+  const outlineMarkdown = typeof props.activeSuite?.metadata?.outlineMarkdown === "string"
+    ? props.activeSuite.metadata.outlineMarkdown
+    : "";
   return (
     <>
       <header className="hero-bar compact">
@@ -1134,6 +1170,12 @@ function SuiteConfig(props: {
             <button className={props.feedbackMode === "final" ? "active" : ""} onClick={() => props.onFeedbackMode("final")} disabled={!props.canEditSuite}>Show at End</button>
           </div>
           <div className="type-row">{(props.activeSuite?.allowedTypes || ["single", "multiple", "boolean", "blank", "coding"]).map((type) => <span key={type}>{type}</span>)}</div>
+          {outlineMarkdown && (
+            <details className="suite-outline">
+              <summary>Suite Outline</summary>
+              <pre>{outlineMarkdown}</pre>
+            </details>
+          )}
           {props.rawParsedQuestions.length > 0 && <RawQuestionSummary questions={props.rawParsedQuestions} />}
           <div className="question-list">{props.activeQuestions.map((question, index) => <article key={question.id}><strong>{index + 1}. {question.title}</strong><span>{question.type} | {question.difficulty}</span></article>)}</div>
         </section>

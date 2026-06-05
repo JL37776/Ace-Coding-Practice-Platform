@@ -76,6 +76,7 @@ export interface TrainingSuite {
   total: number;
   allowedTypes: QuestionType[];
   feedbackMode?: PracticeFeedbackMode;
+  metadata?: Record<string, unknown>;
 }
 
 export interface QuestionOption {
