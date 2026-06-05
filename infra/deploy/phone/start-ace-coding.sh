@@ -20,7 +20,7 @@ stop_port() {
 wait_http() {
   url="$1"
   i=0
-  while [ "$i" -lt 30 ]; do
+  while [ "$i" -lt 180 ]; do
     if curl -fsS "$url" >/dev/null 2>&1; then
       return 0
     fi
@@ -28,6 +28,17 @@ wait_http() {
     sleep 1
   done
   return 1
+}
+
+dump_service_logs() {
+  echo "==== backend systemd status ===="
+  systemctl status ace-coding-backend --no-pager -l 2>/dev/null || true
+  echo "==== backend journal ===="
+  sudo journalctl -u ace-coding-backend -n 120 --no-pager 2>/dev/null || true
+  echo "==== backend log ===="
+  tail -120 "$LOG_DIR/backend.log" 2>/dev/null || true
+  echo "==== frontend log ===="
+  tail -80 "$LOG_DIR/frontend.log" 2>/dev/null || true
 }
 
 stop_port 3100
@@ -62,8 +73,8 @@ nohup env \
   VITE_EDGE_HEADER_VALUE="${VITE_EDGE_HEADER_VALUE:-ace-cloudflare-edge}" \
   npm run preview -- --host 0.0.0.0 --port 8080 >"$LOG_DIR/frontend.log" 2>&1 &
 
-wait_http "http://127.0.0.1:3100/api/health"
-wait_http "http://127.0.0.1:8080/api/health"
+wait_http "http://127.0.0.1:3100/api/health" || { dump_service_logs; exit 1; }
+wait_http "http://127.0.0.1:8080/api/health" || { dump_service_logs; exit 1; }
 
 if [ "${ACE_START_RUNNER:-1}" = "1" ]; then
   "$APP_DIR/infra/deploy/phone/start-runner.sh"

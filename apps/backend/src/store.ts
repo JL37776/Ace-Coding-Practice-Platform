@@ -352,14 +352,24 @@ function detachTopic(nodes: TopicNode[], id: string): TopicNode | undefined {
 }
 
 async function seedQuestionBank() {
-  for (const [index, topic] of flattenTopics(seedTopics).entries()) {
-    await saveTopic(topic, index);
-  }
-  for (const suite of seedSuites) {
-    await saveSuite(suite);
-  }
-  for (const [index, question] of seedQuestions.entries()) {
-    await saveQuestion(question, index);
+  const connection = await getPool().getConnection();
+  try {
+    await connection.beginTransaction();
+    for (const [index, topic] of flattenTopics(seedTopics).entries()) {
+      await saveTopic(topic, index, connection);
+    }
+    for (const suite of seedSuites) {
+      await saveSuite(suite, connection);
+    }
+    for (const [index, question] of seedQuestions.entries()) {
+      await saveQuestion(question, index, connection);
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
 }
 
@@ -440,8 +450,8 @@ async function loadQuestionBank() {
   }));
 }
 
-async function saveTopic(topic: TopicNode, sortOrder: number) {
-  await getPool().execute(
+async function saveTopic(topic: TopicNode, sortOrder: number, executor: mysql.Pool | mysql.PoolConnection = getPool()) {
+  await executor.execute(
     `INSERT INTO ace_topics (id, scope, owner_user_id, name, parent_id, score_percent, done, total, sort_order)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE scope = VALUES(scope), owner_user_id = VALUES(owner_user_id),
@@ -451,8 +461,8 @@ async function saveTopic(topic: TopicNode, sortOrder: number) {
   );
 }
 
-async function saveSuite(suite: TrainingSuite) {
-  await getPool().execute(
+async function saveSuite(suite: TrainingSuite, executor: mysql.Pool | mysql.PoolConnection = getPool()) {
+  await executor.execute(
     `INSERT INTO ace_suites (id, scope, owner_user_id, topic_id, title, description, question_count,
        duration_minutes, score_percent, done, total, allowed_types_json, feedback_mode, metadata_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -481,8 +491,8 @@ async function saveSuite(suite: TrainingSuite) {
   );
 }
 
-async function saveQuestion(question: Question, sortOrder: number) {
-  await getPool().execute(
+async function saveQuestion(question: Question, sortOrder: number, executor: mysql.Pool | mysql.PoolConnection = getPool()) {
+  await executor.execute(
     `INSERT INTO ace_questions (id, scope, owner_user_id, suite_id, type, title, description,
        difficulty, tags_json, media_json, options_json, answer_json, explanation, problem_id, metadata_json, sort_order)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
