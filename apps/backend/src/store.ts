@@ -30,6 +30,32 @@ export const store = {
     topics.push(topic);
     return topic;
   },
+  moveTopic(id: string, parentId: string | undefined, user: User) {
+    const topic = findTopic(topics, id);
+    if (!topic) throw new Error("Topic not found");
+    if (!canWriteScoped(topic, user)) throw new Error("Access denied");
+    if (parentId === id) throw new Error("A topic cannot be moved under itself");
+
+    const descendantIds = new Set(collectChildTopicIds(id));
+    if (parentId && descendantIds.has(parentId)) {
+      throw new Error("A topic cannot be moved under one of its child topics");
+    }
+
+    const parent = parentId ? findTopic(topics, parentId) : undefined;
+    if (parentId && !parent) throw new Error("Target parent topic not found");
+    if (parent && !canWriteScoped(parent, user)) throw new Error("Access denied");
+    if (parent && parent.scope !== topic.scope) throw new Error("Cannot move topics across bank scopes");
+
+    const removed = detachTopic(topics, id);
+    if (!removed) throw new Error("Topic not found");
+    removed.parentId = parent?.id;
+    if (parent) {
+      parent.children = [...(parent.children || []), removed];
+    } else {
+      topics.push(removed);
+    }
+    return removed;
+  },
   listSuites(user: User, topicId?: string, scope?: BankScope) {
     const readable = suites.filter((suite) => canReadScoped(suite, user) && (!scope || suite.scope === scope));
     if (!topicId) return readable;
@@ -200,4 +226,19 @@ function removeTopic(nodes: TopicNode[], id: string): boolean {
     return true;
   }
   return nodes.some((node) => node.children && removeTopic(node.children, id));
+}
+
+function detachTopic(nodes: TopicNode[], id: string): TopicNode | undefined {
+  const index = nodes.findIndex((node) => node.id === id);
+  if (index >= 0) {
+    return nodes.splice(index, 1)[0];
+  }
+  for (const node of nodes) {
+    const child = node.children ? detachTopic(node.children, id) : undefined;
+    if (child) {
+      if (node.children && node.children.length === 0) node.children = undefined;
+      return child;
+    }
+  }
+  return undefined;
 }

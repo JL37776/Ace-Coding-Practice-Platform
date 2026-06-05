@@ -50,6 +50,10 @@ const createTopicSchema = z.object({
   name: z.string().min(1).max(120)
 });
 
+const moveTopicSchema = z.object({
+  parentId: z.string().min(1).nullable().optional()
+});
+
 const createQuestionSchema = z.object({
   scope: z.enum(["public", "personal"]).default("personal"),
   suiteId: z.string().min(1),
@@ -247,6 +251,15 @@ export function createApiRouter() {
     try {
       store.deleteTopic(req.params.id, req.user!);
       res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/topics/:id/move", requireUser, (req, res, next) => {
+    try {
+      const payload = moveTopicSchema.parse(req.body);
+      res.json({ data: store.moveTopic(req.params.id, payload.parentId || undefined, req.user!) });
     } catch (error) {
       next(error);
     }

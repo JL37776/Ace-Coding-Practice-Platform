@@ -347,7 +347,7 @@ p {
 }
 
 .topic-row {
-  grid-template-columns: 34px minmax(0, 1fr) 32px;
+  grid-template-columns: 34px minmax(0, 1fr) 76px;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -405,11 +405,17 @@ p {
   font-size: 11px;
 }
 
+.topic-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  padding-right: 4px;
+}
+
 .topic-action-button {
   width: 28px;
   height: 28px;
-  align-self: center;
-  justify-self: center;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: #ffffff;
@@ -417,6 +423,12 @@ p {
   font-size: 16px;
   font-weight: 900;
   line-height: 1;
+}
+
+.topic-action-button.move {
+  width: auto;
+  padding: 0 6px;
+  font-size: 11px;
 }
 
 .topic-action-button:hover {
@@ -438,6 +450,23 @@ p {
   margin: -4px 0 8px;
   color: #64748b;
   font-size: 13px;
+}
+
+.modal-field {
+  display: grid;
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.modal-field select {
+  width: 100%;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+  color: #172033;
 }
 
 .suite-row {

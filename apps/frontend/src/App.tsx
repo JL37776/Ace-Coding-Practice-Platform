@@ -282,6 +282,8 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState<"topic" | "suite" | null>(null);
   const [modalScope, setModalScope] = useState<BankScope>("public");
   const [modalParentTopic, setModalParentTopic] = useState<TopicNode | null>(null);
+  const [moveTopicTarget, setMoveTopicTarget] = useState<TopicNode | null>(null);
+  const [moveParentId, setMoveParentId] = useState("");
   const [questionResults, setQuestionResults] = useState<Record<string, "correct" | "incorrect">>({});
 
   const publicTopics = topics.filter((topic) => topic.scope === "public");
@@ -608,6 +610,19 @@ export default function App() {
     }
   }
 
+  async function moveTopic() {
+    if (!moveTopicTarget) return;
+    try {
+      const moved = await api.moveTopic(moveTopicTarget.id, { parentId: moveParentId || undefined });
+      if (moveParentId) setOpenTopics({ ...openTopics, [moveParentId]: true });
+      setMoveTopicTarget(null);
+      setMoveParentId("");
+      await refreshWorkspace({ scope: moved.scope, topicId: moved.id, suiteId: "" });
+    } catch (error) {
+      alert("Failed to move topic: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
+  }
+
   function submitNonCoding() {
     if (!currentQuestion) return;
     const value = answers[currentQuestion.id];
@@ -787,6 +802,7 @@ export default function App() {
           onAddTopic={() => void addTopic("public")}
           onAddSuite={() => void addSuite("public")}
           onOpenModal={(type, scope, parentTopic) => { setModalOpen(type); setModalScope(scope); setModalParentTopic(parentTopic || null); }}
+          onOpenMoveTopic={(topic) => { setMoveTopicTarget(topic); setMoveParentId(topic.parentId || ""); }}
           onDeleteTopic={deleteTopic}
           onDeleteSuite={deleteSuite}
         />
@@ -819,6 +835,7 @@ export default function App() {
           onAddTopic={() => void addTopic("personal")}
           onAddSuite={() => void addSuite("personal")}
           onOpenModal={(type, scope, parentTopic) => { setModalOpen(type); setModalScope(scope); setModalParentTopic(parentTopic || null); }}
+          onOpenMoveTopic={(topic) => { setMoveTopicTarget(topic); setMoveParentId(topic.parentId || ""); }}
           onDeleteTopic={deleteTopic}
           onDeleteSuite={deleteSuite}
         />
@@ -905,6 +922,15 @@ export default function App() {
           setNewSuiteTitle({ ...newSuiteTitle, [modalScope]: "" });
         }}
       />
+      <MoveTopicModal
+        open={Boolean(moveTopicTarget)}
+        topic={moveTopicTarget}
+        topics={moveTopicTarget?.scope === "personal" ? personalTopics : publicTopics}
+        parentId={moveParentId}
+        onParentId={setMoveParentId}
+        onMove={() => void moveTopic()}
+        onClose={() => { setMoveTopicTarget(null); setMoveParentId(""); }}
+      />
     </main>
   );
 }
@@ -945,6 +971,40 @@ function AddItemModal(props: {
   );
 }
 
+function MoveTopicModal(props: {
+  open: boolean;
+  topic: TopicNode | null;
+  topics: TopicNode[];
+  parentId: string;
+  onParentId: (value: string) => void;
+  onMove: () => void;
+  onClose: () => void;
+}) {
+  if (!props.open || !props.topic) return null;
+  const options = getMoveParentOptions(props.topics, props.topic.id);
+  return (
+    <div className="modal-overlay" onClick={props.onClose}>
+      <div className="modal-content" onClick={(event) => event.stopPropagation()}>
+        <h3>Move Project</h3>
+        <p className="modal-context">Move {props.topic.name} under another project.</p>
+        <label className="modal-field">
+          Target parent
+          <select value={props.parentId} onChange={(event) => props.onParentId(event.target.value)}>
+            <option value="">Top level</option>
+            {options.map((option) => (
+              <option key={option.topic.id} value={option.topic.id}>{`${"  ".repeat(option.depth)}${option.topic.name}`}</option>
+            ))}
+          </select>
+        </label>
+        <div className="modal-actions">
+          <button onClick={props.onMove}>Move</button>
+          <button className="secondary" onClick={props.onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BankPanel(props: {
   title: string;
   scope: BankScope;
@@ -968,6 +1028,7 @@ function BankPanel(props: {
   onAddTopic: () => void;
   onAddSuite: () => void;
   onOpenModal: (type: "topic" | "suite", scope: BankScope, parentTopic?: TopicNode) => void;
+  onOpenMoveTopic: (topic: TopicNode) => void;
   onDeleteTopic?: (id: string) => void;
   onDeleteSuite?: (id: string) => void;
 }) {
@@ -997,6 +1058,7 @@ function BankPanel(props: {
                 onSelectFolder={props.onSelectFolder}
                 onSelectSuite={props.onSelectSuite}
                 onAddChildTopic={(topic) => props.onOpenModal("topic", props.scope, topic)}
+                onOpenMoveTopic={props.onOpenMoveTopic}
                 canAddChildTopic={!disabled}
                 onDeleteTopic={props.onDeleteTopic}
                 onDeleteSuite={props.onDeleteSuite}
@@ -1026,6 +1088,7 @@ function TopicNodeView(props: {
   onSelectFolder: (scope: BankScope, topic: TopicNode) => void;
   onSelectSuite: (id: string) => void;
   onAddChildTopic: (topic: TopicNode) => void;
+  onOpenMoveTopic: (topic: TopicNode) => void;
   canAddChildTopic: boolean;
   onDeleteTopic?: (id: string) => void;
   onDeleteSuite?: (id: string) => void;
@@ -1047,7 +1110,10 @@ function TopicNodeView(props: {
           <span>{props.topic.total ? `${props.topic.scorePercent}% (${props.topic.done}/${props.topic.total})` : `${nestedSuiteCount} suites`}</span>
         </button>
         {props.canAddChildTopic && (
-          <button className="topic-action-button" onClick={() => props.onAddChildTopic(props.topic)} title={`Add child topic under ${props.topic.name}`} aria-label={`Add child topic under ${props.topic.name}`}>+</button>
+          <div className="topic-actions">
+            <button className="topic-action-button" onClick={() => props.onAddChildTopic(props.topic)} title={`Add child topic under ${props.topic.name}`} aria-label={`Add child topic under ${props.topic.name}`}>+</button>
+            <button className="topic-action-button move" onClick={() => props.onOpenMoveTopic(props.topic)} title={`Move ${props.topic.name}`} aria-label={`Move ${props.topic.name}`}>Move</button>
+          </div>
         )}
       </div>
       {open && (
@@ -1066,6 +1132,7 @@ function TopicNodeView(props: {
               onSelectFolder={props.onSelectFolder}
               onSelectSuite={props.onSelectSuite}
               onAddChildTopic={props.onAddChildTopic}
+              onOpenMoveTopic={props.onOpenMoveTopic}
               canAddChildTopic={props.canAddChildTopic}
               onDeleteTopic={props.onDeleteTopic}
               onDeleteSuite={props.onDeleteSuite}
@@ -1492,6 +1559,19 @@ function ResultList({ submissions }: { submissions: Submission[] }) {
 
 function flattenTopics(nodes: TopicNode[]): TopicNode[] {
   return nodes.flatMap((node) => [node, ...flattenTopics(node.children || [])]);
+}
+
+function getMoveParentOptions(nodes: TopicNode[], movingTopicId: string) {
+  const movingTopic = flattenTopics(nodes).find((topic) => topic.id === movingTopicId);
+  const excludedIds = new Set([movingTopicId, ...flattenTopics(movingTopic?.children || []).map((topic) => topic.id)]);
+  return flattenTopicOptions(nodes).filter((option) => !excludedIds.has(option.topic.id));
+}
+
+function flattenTopicOptions(nodes: TopicNode[], depth = 0): Array<{ topic: TopicNode; depth: number }> {
+  return nodes.flatMap((node) => [
+    { topic: node, depth },
+    ...flattenTopicOptions(node.children || [], depth + 1)
+  ]);
 }
 
 function collectTopicIds(nodes: TopicNode[], topicId: string) {

@@ -71,6 +71,8 @@ export const api = {
   listTopics: () => request<TopicNode[]>("/api/topics"),
   createTopic: (input: { scope: "public" | "personal"; parentId?: string; name: string }) =>
     request<TopicNode>("/api/topics", { method: "POST", body: JSON.stringify(input) }),
+  moveTopic: (id: string, input: { parentId?: string }) =>
+    request<TopicNode>(`/api/topics/${id}/move`, { method: "PATCH", body: JSON.stringify(input) }),
   deleteTopic: (id: string) =>
     request<void>(`/api/topics/${id}`, { method: "DELETE" }),
   listSuites: (topicId?: string, scope?: "public" | "personal") => {
