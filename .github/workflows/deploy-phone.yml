@@ -99,6 +99,7 @@ jobs:
           if [ -f "$app_dir/apps/backend/.env" ]; then
             cp "$app_dir/apps/backend/.env" /tmp/ace-backend.env
           fi
+          find "$app_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
           tar -xzf /tmp/ace-coding-release.tgz -C "$app_dir"
           if [ -f /tmp/ace-backend.env ]; then
             mv /tmp/ace-backend.env "$app_dir/apps/backend/.env"
