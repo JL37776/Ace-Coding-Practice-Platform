@@ -4,12 +4,10 @@ import { ZodError } from "zod";
 import { initAuthStore } from "./auth-store.js";
 import { config } from "./config.js";
 import { createApiRouter } from "./routes.js";
-import { initQuestionBankStore } from "./store.js";
 import { initStudyStore } from "./study-store.js";
 
 await initAuthStore();
 await initStudyStore();
-await initQuestionBankStore();
 
 const app = express();
 
