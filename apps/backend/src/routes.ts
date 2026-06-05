@@ -225,7 +225,7 @@ export function createApiRouter() {
     res.json({ data: store.listTopics(_req.user!) });
   });
 
-  router.post("/topics", requireUser, (req, res, next) => {
+  router.post("/topics", requireUser, async (req, res, next) => {
     try {
       const payload = createTopicSchema.parse(req.body);
       if (payload.scope === "public" && req.user?.role !== "admin") {
@@ -241,25 +241,25 @@ export function createApiRouter() {
         done: 0,
         total: 0
       };
-      res.status(201).json({ data: store.createTopic(topic) });
+      res.status(201).json({ data: await store.createTopic(topic) });
     } catch (error) {
       next(error);
     }
   });
 
-  router.delete("/topics/:id", requireUser, (req, res, next) => {
+  router.delete("/topics/:id", requireUser, async (req, res, next) => {
     try {
-      store.deleteTopic(req.params.id, req.user!);
+      await store.deleteTopic(req.params.id, req.user!);
       res.status(204).send();
     } catch (error) {
       next(error);
     }
   });
 
-  router.patch("/topics/:id/move", requireUser, (req, res, next) => {
+  router.patch("/topics/:id/move", requireUser, async (req, res, next) => {
     try {
       const payload = moveTopicSchema.parse(req.body);
-      res.json({ data: store.moveTopic(req.params.id, payload.parentId || undefined, req.user!) });
+      res.json({ data: await store.moveTopic(req.params.id, payload.parentId || undefined, req.user!) });
     } catch (error) {
       next(error);
     }
@@ -270,7 +270,7 @@ export function createApiRouter() {
     res.json({ data: store.listSuites(req.user!, typeof req.query.topicId === "string" ? req.query.topicId : undefined, scope) });
   });
 
-  router.post("/suites", requireUser, (req, res, next) => {
+  router.post("/suites", requireUser, async (req, res, next) => {
     try {
       const payload = createSuiteSchema.parse(req.body);
       if (payload.scope === "public" && req.user?.role !== "admin") {
@@ -284,25 +284,25 @@ export function createApiRouter() {
         done: 0,
         total: payload.questionCount
       };
-      res.status(201).json({ data: store.createSuite(suite) });
+      res.status(201).json({ data: await store.createSuite(suite) });
     } catch (error) {
       next(error);
     }
   });
 
-  router.delete("/suites/:id", requireUser, (req, res, next) => {
+  router.delete("/suites/:id", requireUser, async (req, res, next) => {
     try {
-      store.deleteSuite(req.params.id, req.user!);
+      await store.deleteSuite(req.params.id, req.user!);
       res.status(204).send();
     } catch (error) {
       next(error);
     }
   });
 
-  router.patch("/suites/:id", requireUser, (req, res, next) => {
+  router.patch("/suites/:id", requireUser, async (req, res, next) => {
     try {
       const payload = updateSuiteSchema.parse(req.body);
-      const updated = store.updateSuite(req.params.id, payload, req.user!);
+      const updated = await store.updateSuite(req.params.id, payload, req.user!);
       res.json({ data: updated });
     } catch (error) {
       next(error);
@@ -314,7 +314,7 @@ export function createApiRouter() {
     res.json({ data: store.listQuestions(req.user!, typeof req.query.suiteId === "string" ? req.query.suiteId : undefined, scope) });
   });
 
-  router.post("/questions", requireUser, (req, res, next) => {
+  router.post("/questions", requireUser, async (req, res, next) => {
     try {
       const payload = createQuestionSchema.parse(req.body);
       if (payload.scope === "public" && req.user?.role !== "admin") {
@@ -325,7 +325,7 @@ export function createApiRouter() {
         ownerUserId: payload.scope === "personal" ? req.user!.id : undefined,
         ...payload
       };
-      res.status(201).json({ data: store.createQuestion(question) });
+      res.status(201).json({ data: await store.createQuestion(question) });
     } catch (error) {
       next(error);
     }
@@ -340,7 +340,7 @@ export function createApiRouter() {
     }
   });
 
-  router.post("/topic-raw/import", requireUser, (req, res, next) => {
+  router.post("/topic-raw/import", requireUser, async (req, res, next) => {
     try {
       const payload = topicRawSchema.parse(req.body);
       if (payload.scope === "public" && req.user?.role !== "admin") {
@@ -348,11 +348,14 @@ export function createApiRouter() {
       }
       const parsed = parseTopicRaw(payload.raw, payload.scope, payload.topicId, req.user!);
       if (payload.suiteId) {
-        const overwritten = store.replaceSuiteContents(payload.suiteId, parsed.suite, parsed.questions, req.user!);
+        const overwritten = await store.replaceSuiteContents(payload.suiteId, parsed.suite, parsed.questions, req.user!);
         return res.json({ data: overwritten });
       }
-      const suite = store.createSuite(parsed.suite);
-      const importedQuestions = parsed.questions.map((question) => store.createQuestion({ ...question, suiteId: suite.id }));
+      const suite = await store.createSuite(parsed.suite);
+      const importedQuestions = [];
+      for (const question of parsed.questions) {
+        importedQuestions.push(await store.createQuestion({ ...question, suiteId: suite.id }));
+      }
       res.status(201).json({ data: { suite, questions: importedQuestions } });
     } catch (error) {
       next(error);

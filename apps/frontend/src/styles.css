@@ -718,6 +718,133 @@ p {
   display: grid;
   align-items: start;
 }
+
+.config-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.config-section {
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.config-section summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 14px 16px;
+  color: #172033;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.config-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.config-section summary::before {
+  content: "›";
+  display: inline-block;
+  margin-right: 10px;
+  color: #64748b;
+  transform: rotate(0deg);
+  transition: transform 0.15s ease;
+}
+
+.config-section[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.config-section[open] {
+  padding-bottom: 14px;
+}
+
+.config-section > :not(summary) {
+  margin-left: 14px;
+  margin-right: 14px;
+}
+
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.suite-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.stat-card {
+  display: grid;
+  gap: 4px;
+  min-height: 76px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.stat-card span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stat-card strong {
+  color: #172033;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.stat-card.good strong {
+  color: #047857;
+}
+
+.stat-card.bad strong {
+  color: #dc2626;
+}
+
+.result-lists {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.result-list {
+  display: grid;
+  gap: 6px;
+  min-height: 88px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.result-list strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.result-list span,
+.result-list em {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 13px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-list span {
+  color: #334155;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

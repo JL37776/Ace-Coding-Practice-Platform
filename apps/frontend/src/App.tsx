@@ -858,6 +858,8 @@ export default function App() {
               activeSuite={activeSuite}
               canEditSuite={canEditActiveSuite}
               activeQuestions={activeQuestions}
+              answers={answers}
+              questionResults={questionResults}
               rawParsedQuestions={rawParsedQuestions}
               activeTopicId={activeTopicId}
               feedbackMode={activeFeedbackMode}
@@ -1192,6 +1194,8 @@ function SuiteConfig(props: {
   activeSuite?: TrainingSuite;
   canEditSuite: boolean;
   activeQuestions: Question[];
+  answers: Record<string, unknown>;
+  questionResults: Record<string, "correct" | "incorrect">;
   rawParsedQuestions: Question[];
   activeTopicId: string;
   feedbackMode: PracticeFeedbackMode;
@@ -1213,7 +1217,6 @@ function SuiteConfig(props: {
   onSaveEdit: () => void;
   onDeleteSuite: (id: string) => void;
 }) {
-  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const outlineMarkdown = typeof props.activeSuite?.metadata?.outlineMarkdown === "string"
     ? props.activeSuite.metadata.outlineMarkdown
     : "";
@@ -1227,31 +1230,42 @@ function SuiteConfig(props: {
         </div>
       </header>
 
-      <section className="editor-grid">
-        <section className="panel">
-          <div className="panel-heading">
-            <div><h3>Create / Edit Test Suite</h3><p>This page configures the suite. Code appears only inside coding questions during practice.</p></div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button className="secondary" onClick={() => setKnowledgeOpen(!knowledgeOpen)} disabled={!props.activeSuite}>Knowledge</button>
-              <button className="secondary" onClick={() => props.activeSuite && props.onDeleteSuite(props.activeSuite.id)} disabled={!props.canEditSuite || !props.activeSuite} style={{ color: "#ef4444" }}>Delete</button>
-              <button className="secondary" onClick={props.onSaveEdit} disabled={!props.canEditSuite || props.isSavingEdit}>Save</button>
-            </div>
+      <section className="panel config-panel">
+        <div className="panel-heading">
+          <div><h3>Suite Control</h3><p>Progress is visible first. Editing tools stay folded until needed.</p></div>
+        </div>
+        <SuiteResultSummary questions={props.activeQuestions} answers={props.answers} questionResults={props.questionResults} />
+        <details className="config-section">
+          <summary>Knowledge Markdown</summary>
+          <section className="suite-outline">
+            {outlineMarkdown ? (
+              <pre>{outlineMarkdown}</pre>
+            ) : (
+              <p>No knowledge outline is saved for this suite yet. Import raw suite content with an @outline Markdown block to attach one.</p>
+            )}
+          </section>
+        </details>
+        <details className="config-section">
+          <summary>Suite settings</summary>
+          <div className="config-actions">
+            <button className="secondary" onClick={() => props.activeSuite && props.onDeleteSuite(props.activeSuite.id)} disabled={!props.canEditSuite || !props.activeSuite} style={{ color: "#ef4444" }}>Delete</button>
+            <button className="secondary" onClick={props.onSaveEdit} disabled={!props.canEditSuite || props.isSavingEdit}>Save</button>
           </div>
           <div className="form-grid">
             <label>Suite Name
-              <input 
-                value={props.editingTitle[props.activeSuite?.id || ""] !== undefined ? props.editingTitle[props.activeSuite?.id || ""] : props.activeSuite?.title || ""} 
+              <input
+                value={props.editingTitle[props.activeSuite?.id || ""] !== undefined ? props.editingTitle[props.activeSuite?.id || ""] : props.activeSuite?.title || ""}
                 onChange={(e) => props.activeSuite && props.onEditTitle(props.activeSuite.id, e.target.value)}
                 readOnly={!props.canEditSuite}
               />
             </label>
             <label>Parent Topic<input value={props.activeTopicId} readOnly /></label>
             <label>Time Limit (minutes)
-              <input 
+              <input
                 type="number"
                 min="1"
                 max="240"
-                value={props.editingDuration[props.activeSuite?.id || ""] !== undefined ? props.editingDuration[props.activeSuite?.id || ""] : props.activeSuite?.durationMinutes || 15} 
+                value={props.editingDuration[props.activeSuite?.id || ""] !== undefined ? props.editingDuration[props.activeSuite?.id || ""] : props.activeSuite?.durationMinutes || 15}
                 onChange={(e) => props.activeSuite && props.onEditDuration(props.activeSuite.id, e.target.value)}
                 readOnly={!props.canEditSuite}
               />
@@ -1271,21 +1285,11 @@ function SuiteConfig(props: {
             <button className={props.feedbackMode === "final" ? "active" : ""} onClick={() => props.onFeedbackMode("final")} disabled={!props.canEditSuite}>Show at End</button>
           </div>
           <div className="type-row">{(props.activeSuite?.allowedTypes || ["single", "multiple", "boolean", "blank", "coding"]).map((type) => <span key={type}>{type}</span>)}</div>
-          {knowledgeOpen && (
-            <section className="suite-outline">
-              <strong>Knowledge Markdown</strong>
-              {outlineMarkdown ? (
-                <pre>{outlineMarkdown}</pre>
-              ) : (
-                <p>No knowledge outline is saved for this suite yet. Import raw suite content with an @outline Markdown block to attach one.</p>
-              )}
-            </section>
-          )}
           {props.rawParsedQuestions.length > 0 && <RawQuestionSummary questions={props.rawParsedQuestions} />}
           <div className="question-list">{props.activeQuestions.map((question, index) => <article key={question.id}><strong>{index + 1}. {question.title}</strong><span>{question.type} | {question.difficulty}</span></article>)}</div>
-        </section>
-
-        <section className="panel raw-panel">
+        </details>
+        <details className="config-section">
+          <summary>Raw import</summary>
           <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI/generated raw content for one full suite. Validate can overwrite the current suite after confirmation.</p></div><button className="secondary" disabled>AI Similar</button></div>
           <label className="prompt-template-label">
             AI Prompt Template
@@ -1296,10 +1300,51 @@ function SuiteConfig(props: {
           {props.editorMessage && <div className="notice">{props.editorMessage}</div>}
           {props.rawPreview && <pre className="raw-preview">{props.rawPreview}</pre>}
           <div className="ai-box"><strong>AI Add Similar Questions</strong><span>Target: {props.scope} bank</span><span>Generate similar questions after schema validation. Provider wiring comes next.</span></div>
-        </section>
+        </details>
       </section>
     </>
   );
+}
+
+function SuiteResultSummary(props: {
+  questions: Question[];
+  answers: Record<string, unknown>;
+  questionResults: Record<string, "correct" | "incorrect">;
+}) {
+  const answered = props.questions.filter((question) => hasAnswer(props.answers[question.id]));
+  const correct = props.questions.filter((question) => props.questionResults[question.id] === "correct");
+  const wrong = props.questions.filter((question) => props.questionResults[question.id] === "incorrect");
+  const checkedCount = correct.length + wrong.length;
+  const accuracy = checkedCount ? Math.round((correct.length / checkedCount) * 100) : 0;
+  return (
+    <section className="suite-stats">
+      <div className="stat-card"><span>Answered</span><strong>{answered.length}/{props.questions.length}</strong></div>
+      <div className="stat-card good"><span>Correct</span><strong>{correct.length}</strong></div>
+      <div className="stat-card bad"><span>Wrong</span><strong>{wrong.length}</strong></div>
+      <div className="stat-card"><span>Accuracy</span><strong>{accuracy}%</strong></div>
+      <div className="result-lists">
+        <QuestionResultList title="Wrong questions" questions={wrong} emptyText="No wrong answers yet." />
+        <QuestionResultList title="Correct questions" questions={correct} emptyText="No correct answers checked yet." />
+      </div>
+    </section>
+  );
+}
+
+function QuestionResultList(props: { title: string; questions: Question[]; emptyText: string }) {
+  return (
+    <div className="result-list">
+      <strong>{props.title}</strong>
+      {props.questions.length ? (
+        props.questions.slice(0, 5).map((question) => <span key={question.id}>{question.title}</span>)
+      ) : (
+        <em>{props.emptyText}</em>
+      )}
+    </div>
+  );
+}
+
+function hasAnswer(value: unknown) {
+  return value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0);
 }
 
 function StudyDashboardPanel(props: {
