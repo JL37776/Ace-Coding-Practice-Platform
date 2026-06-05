@@ -455,7 +455,7 @@ async function saveSuite(suite: TrainingSuite) {
   await getPool().execute(
     `INSERT INTO ace_suites (id, scope, owner_user_id, topic_id, title, description, question_count,
        duration_minutes, score_percent, done, total, allowed_types_json, feedback_mode, metadata_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, CAST(? AS JSON))
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE scope = VALUES(scope), owner_user_id = VALUES(owner_user_id),
        topic_id = VALUES(topic_id), title = VALUES(title), description = VALUES(description),
        question_count = VALUES(question_count), duration_minutes = VALUES(duration_minutes),
@@ -485,7 +485,7 @@ async function saveQuestion(question: Question, sortOrder: number) {
   await getPool().execute(
     `INSERT INTO ace_questions (id, scope, owner_user_id, suite_id, type, title, description,
        difficulty, tags_json, media_json, options_json, answer_json, explanation, problem_id, metadata_json, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), ?, ?, CAST(? AS JSON), ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE scope = VALUES(scope), owner_user_id = VALUES(owner_user_id),
        suite_id = VALUES(suite_id), type = VALUES(type), title = VALUES(title), description = VALUES(description),
        difficulty = VALUES(difficulty), tags_json = VALUES(tags_json), media_json = VALUES(media_json),

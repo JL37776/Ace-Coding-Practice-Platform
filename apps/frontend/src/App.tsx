@@ -736,6 +736,7 @@ export default function App() {
     return (
       <PracticePanel
         suite={activeSuite}
+        user={user}
         questions={activeQuestions}
         questionIndex={questionIndex}
         currentQuestion={currentQuestion}
@@ -1414,6 +1415,7 @@ function ActivityHeatmap({ activity }: { activity: StudyDashboard["heatmap"] }) 
 
 function PracticePanel(props: {
   suite?: TrainingSuite;
+  user: User;
   questions: Question[];
   questionIndex: number;
   currentQuestion?: Question;
@@ -1516,14 +1518,16 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
   const value = props.answers[props.question.id];
   const showAnswer = props.feedbackMode === "final" && props.finalSubmitted;
   if (props.question.type === "coding") {
+    const codeAllowed = props.user.role === "admin";
     return (
       <>
         <div className="panel-heading"><div><h3>{props.question.title}</h3><p>{props.question.description || props.selectedProblem?.statement}</p></div><select value={props.language} onChange={(event) => props.onLanguage(event.target.value as Language)}>{languages.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+        {!codeAllowed && <div className="notice danger-notice">Code runner access is limited to admin accounts. Use a non-coding question or ask an admin account to run code.</div>}
         {!props.selectedProblem && <div className="notice">Starter template is ready. Runner tests for this problem are not configured yet.</div>}
         <div className="coding-workbench">
           <div className="coding-editor-pane">
-            <CodeEditor language={props.language} value={props.sourceCode} onChange={props.onSourceCode} />
-            <div className="actions"><button onClick={props.onSubmitCode} disabled={props.isSubmitting || !props.selectedProblem}>{props.isSubmitting ? "Running..." : "Run Code"}</button><button className="secondary" onClick={props.onRefresh}>Refresh</button></div>
+            <CodeEditor language={props.language} value={props.sourceCode} onChange={props.onSourceCode} readOnly={!codeAllowed} />
+            <div className="actions"><button onClick={props.onSubmitCode} disabled={!codeAllowed || props.isSubmitting || !props.selectedProblem}>{props.isSubmitting ? "Running..." : "Run Code"}</button><button className="secondary" onClick={props.onRefresh}>Refresh</button></div>
           </div>
           <ResultList submissions={props.submissions} />
         </div>
@@ -1559,7 +1563,7 @@ function QuestionCodeBlock({ question }: { question: Question }) {
   );
 }
 
-function CodeEditor({ language, value, onChange }: { language: Language; value: string; onChange: (value: string) => void }) {
+function CodeEditor({ language, value, onChange, readOnly = false }: { language: Language; value: string; onChange: (value: string) => void; readOnly?: boolean }) {
   const extensions = useMemo(() => {
     switch (language) {
       case "python":
@@ -1585,6 +1589,7 @@ function CodeEditor({ language, value, onChange }: { language: Language; value: 
       theme={codeEditorTheme}
       extensions={extensions}
       basicSetup={{ foldGutter: true, lineNumbers: true, highlightActiveLine: true }}
+      readOnly={readOnly}
       onChange={onChange}
     />
   );

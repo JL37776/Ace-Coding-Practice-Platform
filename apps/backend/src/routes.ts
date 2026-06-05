@@ -405,6 +405,9 @@ export function createApiRouter() {
 
   router.post("/submissions", requireUser, async (req, res, next) => {
     try {
+      if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Code runner access is limited to admin accounts." });
+      }
       const payload = createSubmissionSchema.parse(req.body);
       const problem = store.getProblem(payload.problemId, req.user);
       if (!problem) return res.status(404).json({ error: "Problem not found" });

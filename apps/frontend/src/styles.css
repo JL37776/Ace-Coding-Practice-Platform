@@ -916,6 +916,13 @@ p {
   line-height: 1.5;
 }
 
+.danger-notice {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 800;
+}
+
 .mode-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
