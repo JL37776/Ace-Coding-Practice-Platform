@@ -1213,6 +1213,7 @@ function SuiteConfig(props: {
   onSaveEdit: () => void;
   onDeleteSuite: (id: string) => void;
 }) {
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const outlineMarkdown = typeof props.activeSuite?.metadata?.outlineMarkdown === "string"
     ? props.activeSuite.metadata.outlineMarkdown
     : "";
@@ -1231,6 +1232,7 @@ function SuiteConfig(props: {
           <div className="panel-heading">
             <div><h3>Create / Edit Test Suite</h3><p>This page configures the suite. Code appears only inside coding questions during practice.</p></div>
             <div style={{ display: "flex", gap: "8px" }}>
+              <button className="secondary" onClick={() => setKnowledgeOpen(!knowledgeOpen)} disabled={!props.activeSuite}>Knowledge</button>
               <button className="secondary" onClick={() => props.activeSuite && props.onDeleteSuite(props.activeSuite.id)} disabled={!props.canEditSuite || !props.activeSuite} style={{ color: "#ef4444" }}>Delete</button>
               <button className="secondary" onClick={props.onSaveEdit} disabled={!props.canEditSuite || props.isSavingEdit}>Save</button>
             </div>
@@ -1269,11 +1271,15 @@ function SuiteConfig(props: {
             <button className={props.feedbackMode === "final" ? "active" : ""} onClick={() => props.onFeedbackMode("final")} disabled={!props.canEditSuite}>Show at End</button>
           </div>
           <div className="type-row">{(props.activeSuite?.allowedTypes || ["single", "multiple", "boolean", "blank", "coding"]).map((type) => <span key={type}>{type}</span>)}</div>
-          {outlineMarkdown && (
-            <details className="suite-outline">
-              <summary>Suite Outline</summary>
-              <pre>{outlineMarkdown}</pre>
-            </details>
+          {knowledgeOpen && (
+            <section className="suite-outline">
+              <strong>Knowledge Markdown</strong>
+              {outlineMarkdown ? (
+                <pre>{outlineMarkdown}</pre>
+              ) : (
+                <p>No knowledge outline is saved for this suite yet. Import raw suite content with an @outline Markdown block to attach one.</p>
+              )}
+            </section>
           )}
           {props.rawParsedQuestions.length > 0 && <RawQuestionSummary questions={props.rawParsedQuestions} />}
           <div className="question-list">{props.activeQuestions.map((question, index) => <article key={question.id}><strong>{index + 1}. {question.title}</strong><span>{question.type} | {question.difficulty}</span></article>)}</div>

@@ -757,6 +757,8 @@ p {
 }
 
 .suite-outline {
+  display: grid;
+  gap: 8px;
   margin: 12px 0;
   border: 1px solid #dbeafe;
   border-radius: 8px;
@@ -764,8 +766,7 @@ p {
   background: #f8fbff;
 }
 
-.suite-outline summary {
-  cursor: pointer;
+.suite-outline strong {
   color: #172033;
   font-size: 13px;
   font-weight: 800;
@@ -773,12 +774,19 @@ p {
 
 .suite-outline pre {
   overflow: auto;
-  margin: 10px 0 0;
+  margin: 0;
   color: #334155;
   font-family: inherit;
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.suite-outline p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .mode-switch {
