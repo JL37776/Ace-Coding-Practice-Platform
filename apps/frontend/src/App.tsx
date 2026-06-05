@@ -282,6 +282,7 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState<"topic" | "suite" | null>(null);
   const [modalScope, setModalScope] = useState<BankScope>("public");
   const [modalParentTopic, setModalParentTopic] = useState<TopicNode | null>(null);
+  const [topicActionTarget, setTopicActionTarget] = useState<TopicNode | null>(null);
   const [moveTopicTarget, setMoveTopicTarget] = useState<TopicNode | null>(null);
   const [moveParentId, setMoveParentId] = useState("");
   const [questionResults, setQuestionResults] = useState<Record<string, "correct" | "incorrect">>({});
@@ -802,7 +803,7 @@ export default function App() {
           onAddTopic={() => void addTopic("public")}
           onAddSuite={() => void addSuite("public")}
           onOpenModal={(type, scope, parentTopic) => { setModalOpen(type); setModalScope(scope); setModalParentTopic(parentTopic || null); }}
-          onOpenMoveTopic={(topic) => { setMoveTopicTarget(topic); setMoveParentId(topic.parentId || ""); }}
+          onOpenTopicActions={setTopicActionTarget}
           onDeleteTopic={deleteTopic}
           onDeleteSuite={deleteSuite}
         />
@@ -835,7 +836,7 @@ export default function App() {
           onAddTopic={() => void addTopic("personal")}
           onAddSuite={() => void addSuite("personal")}
           onOpenModal={(type, scope, parentTopic) => { setModalOpen(type); setModalScope(scope); setModalParentTopic(parentTopic || null); }}
-          onOpenMoveTopic={(topic) => { setMoveTopicTarget(topic); setMoveParentId(topic.parentId || ""); }}
+          onOpenTopicActions={setTopicActionTarget}
           onDeleteTopic={deleteTopic}
           onDeleteSuite={deleteSuite}
         />
@@ -931,6 +932,22 @@ export default function App() {
         onMove={() => void moveTopic()}
         onClose={() => { setMoveTopicTarget(null); setMoveParentId(""); }}
       />
+      <TopicActionModal
+        open={Boolean(topicActionTarget)}
+        topic={topicActionTarget}
+        onAddChild={(topic) => {
+          setTopicActionTarget(null);
+          setModalOpen("topic");
+          setModalScope(topic.scope);
+          setModalParentTopic(topic);
+        }}
+        onMove={(topic) => {
+          setTopicActionTarget(null);
+          setMoveTopicTarget(topic);
+          setMoveParentId(topic.parentId || "");
+        }}
+        onClose={() => setTopicActionTarget(null)}
+      />
     </main>
   );
 }
@@ -1005,6 +1022,27 @@ function MoveTopicModal(props: {
   );
 }
 
+function TopicActionModal(props: {
+  open: boolean;
+  topic: TopicNode | null;
+  onAddChild: (topic: TopicNode) => void;
+  onMove: (topic: TopicNode) => void;
+  onClose: () => void;
+}) {
+  if (!props.open || !props.topic) return null;
+  return (
+    <div className="modal-overlay" onClick={props.onClose}>
+      <div className="modal-content topic-action-menu" onClick={(event) => event.stopPropagation()}>
+        <h3>Project Actions</h3>
+        <p className="modal-context">{props.topic.name}</p>
+        <button onClick={() => props.onAddChild(props.topic!)}>Add child project</button>
+        <button className="secondary" onClick={() => props.onMove(props.topic!)}>Move project</button>
+        <button className="secondary" onClick={props.onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function BankPanel(props: {
   title: string;
   scope: BankScope;
@@ -1028,7 +1066,7 @@ function BankPanel(props: {
   onAddTopic: () => void;
   onAddSuite: () => void;
   onOpenModal: (type: "topic" | "suite", scope: BankScope, parentTopic?: TopicNode) => void;
-  onOpenMoveTopic: (topic: TopicNode) => void;
+  onOpenTopicActions: (topic: TopicNode) => void;
   onDeleteTopic?: (id: string) => void;
   onDeleteSuite?: (id: string) => void;
 }) {
@@ -1057,8 +1095,7 @@ function BankPanel(props: {
                 onSelectTopic={props.onSelectTopic}
                 onSelectFolder={props.onSelectFolder}
                 onSelectSuite={props.onSelectSuite}
-                onAddChildTopic={(topic) => props.onOpenModal("topic", props.scope, topic)}
-                onOpenMoveTopic={props.onOpenMoveTopic}
+                onOpenTopicActions={props.onOpenTopicActions}
                 canAddChildTopic={!disabled}
                 onDeleteTopic={props.onDeleteTopic}
                 onDeleteSuite={props.onDeleteSuite}
@@ -1087,14 +1124,13 @@ function TopicNodeView(props: {
   onSelectTopic: (scope: BankScope, id: string) => void;
   onSelectFolder: (scope: BankScope, topic: TopicNode) => void;
   onSelectSuite: (id: string) => void;
-  onAddChildTopic: (topic: TopicNode) => void;
-  onOpenMoveTopic: (topic: TopicNode) => void;
+  onOpenTopicActions: (topic: TopicNode) => void;
   canAddChildTopic: boolean;
   onDeleteTopic?: (id: string) => void;
   onDeleteSuite?: (id: string) => void;
   depth: number;
 }) {
-  const open = props.openTopics[props.topic.id] ?? true;
+  const open = props.openTopics[props.topic.id] ?? false;
   const topicSuites = getTopicSuiteItems(props.topic, props.suites);
   const nestedSuiteCount = countTopicSuites(props.topic, props.suites);
   const hasChildren = Boolean(props.topic.children?.length || topicSuites.length);
@@ -1110,10 +1146,7 @@ function TopicNodeView(props: {
           <span>{props.topic.total ? `${props.topic.scorePercent}% (${props.topic.done}/${props.topic.total})` : `${nestedSuiteCount} suites`}</span>
         </button>
         {props.canAddChildTopic && (
-          <div className="topic-actions">
-            <button className="topic-action-button" onClick={() => props.onAddChildTopic(props.topic)} title={`Add child topic under ${props.topic.name}`} aria-label={`Add child topic under ${props.topic.name}`}>+</button>
-            <button className="topic-action-button move" onClick={() => props.onOpenMoveTopic(props.topic)} title={`Move ${props.topic.name}`} aria-label={`Move ${props.topic.name}`}>Move</button>
-          </div>
+          <button className="topic-action-button" onClick={() => props.onOpenTopicActions(props.topic)} title={`Project actions for ${props.topic.name}`} aria-label={`Project actions for ${props.topic.name}`}>+</button>
         )}
       </div>
       {open && (
@@ -1131,8 +1164,7 @@ function TopicNodeView(props: {
               onSelectTopic={props.onSelectTopic}
               onSelectFolder={props.onSelectFolder}
               onSelectSuite={props.onSelectSuite}
-              onAddChildTopic={props.onAddChildTopic}
-              onOpenMoveTopic={props.onOpenMoveTopic}
+              onOpenTopicActions={props.onOpenTopicActions}
               canAddChildTopic={props.canAddChildTopic}
               onDeleteTopic={props.onDeleteTopic}
               onDeleteSuite={props.onDeleteSuite}

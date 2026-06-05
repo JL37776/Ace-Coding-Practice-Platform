@@ -11,6 +11,7 @@ The user will usually paste a large block of lesson text or ask Codex to read th
 - Work in this repo: `C:\Users\13128\OneDrive\杂项\CodePractice\Ace-Coding-Practice-Platform`
 - Remote: `https://github.com/JL37776/Ace-Coding-Practice-Platform.git`
 - Main branch deploys through `.github/workflows/deploy-phone.yml`
+- Public production URL: `https://acecode.lljobhunting.workers.dev/`
 - Push to `main` triggers "Deploy to server"
 - Do not edit or stage `.idea/copilot.data.migration.ask2agent.xml`
 - Do not stop at local-only changes unless the user explicitly asks for local-only
@@ -195,6 +196,14 @@ The deploy job:
 http://127.0.0.1:3100/api/health
 http://127.0.0.1:8080/api/health
 ```
+
+After a successful deploy, verify the public app through:
+
+```text
+https://acecode.lljobhunting.workers.dev/
+```
+
+Use the public URL for browser login checks. Do not waste time guessing the tunnel host or raw AWS IP when the Cloudflare Worker URL is available.
 
 ## Current Implemented Support
 
