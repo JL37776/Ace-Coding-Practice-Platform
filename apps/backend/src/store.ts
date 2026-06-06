@@ -1,7 +1,46 @@
 import type { BankScope, Language, Question, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
+import mysql from "mysql2/promise";
+import { config } from "./config.js";
 import { problems, questions, suites, systemSettings, testCases, topics } from "./data/seed.js";
 
 const submissions = new Map<string, Submission>();
+let pool: mysql.Pool | undefined;
+
+export async function initTrainingStore() {
+  pool = mysql.createPool({
+    host: config.mysql.host,
+    port: config.mysql.port,
+    database: config.mysql.database,
+    user: config.mysql.user,
+    password: config.mysql.password,
+    waitForConnections: true,
+    connectionLimit: 5,
+    namedPlaceholders: true
+  });
+
+  await getPool().execute(`
+    CREATE TABLE IF NOT EXISTS ace_training_state (
+      id TINYINT PRIMARY KEY,
+      topics_json LONGTEXT NOT NULL,
+      suites_json LONGTEXT NOT NULL,
+      questions_json LONGTEXT NOT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+
+  const [rows] = await getPool().execute<mysql.RowDataPacket[]>(
+    "SELECT topics_json, suites_json, questions_json FROM ace_training_state WHERE id = 1"
+  );
+  const row = rows[0];
+  if (!row) {
+    await persistTrainingState();
+    return;
+  }
+
+  replaceArray(topics, JSON.parse(row.topics_json));
+  replaceArray(suites, JSON.parse(row.suites_json));
+  replaceArray(questions, JSON.parse(row.questions_json));
+}
 
 export const store = {
   getSystemSettings() {
@@ -19,18 +58,20 @@ export const store = {
   listTopics(user: User) {
     return filterTopicTree(topics, user);
   },
-  createTopic(topic: TopicNode) {
+  async createTopic(topic: TopicNode) {
     if (topic.parentId) {
       const parent = findTopic(topics, topic.parentId);
       if (parent) {
         parent.children = [...(parent.children || []), topic];
+        await persistTrainingState();
         return topic;
       }
     }
     topics.push(topic);
+    await persistTrainingState();
     return topic;
   },
-  moveTopic(id: string, parentId: string | undefined, user: User) {
+  async moveTopic(id: string, parentId: string | undefined, user: User) {
     const topic = findTopic(topics, id);
     if (!topic) throw new Error("Topic not found");
     if (!canWriteScoped(topic, user)) throw new Error("Access denied");
@@ -54,6 +95,7 @@ export const store = {
     } else {
       topics.push(removed);
     }
+    await persistTrainingState();
     return removed;
   },
   listSuites(user: User, topicId?: string, scope?: BankScope) {
@@ -70,15 +112,36 @@ export const store = {
       (question) => canReadScoped(question, user) && (!suiteId || question.suiteId === suiteId) && (!scope || question.scope === scope)
     );
   },
-  createQuestion(question: Question) {
+  exportTrainingState() {
+    return {
+      topics,
+      suites,
+      questions,
+      counts: {
+        topics: flattenTopics(topics).length,
+        suites: suites.length,
+        questions: questions.length
+      }
+    };
+  },
+  async importTrainingState(state: { topics: TopicNode[]; suites: TrainingSuite[]; questions: Question[] }) {
+    replaceArray(topics, state.topics);
+    replaceArray(suites, state.suites);
+    replaceArray(questions, state.questions);
+    await persistTrainingState();
+    return this.exportTrainingState();
+  },
+  async createQuestion(question: Question) {
     questions.push(question);
+    await persistTrainingState();
     return question;
   },
-  createSuite(suite: TrainingSuite) {
+  async createSuite(suite: TrainingSuite) {
     suites.push(suite);
+    await persistTrainingState();
     return suite;
   },
-  deleteTopic(id: string, user: User) {
+  async deleteTopic(id: string, user: User) {
     const topic = findTopic(topics, id);
     if (!topic) throw new Error("Topic not found");
     if (!canWriteScoped(topic, user)) throw new Error("Access denied");
@@ -97,8 +160,9 @@ export const store = {
         questions.splice(i, 1);
       }
     }
+    await persistTrainingState();
   },
-  deleteSuite(id: string, user: User) {
+  async deleteSuite(id: string, user: User) {
     const suite = suites.find(s => s.id === id);
     if (!suite) throw new Error("Suite not found");
     if (!canWriteScoped(suite, user)) throw new Error("Access denied");
@@ -112,8 +176,9 @@ export const store = {
         questions.splice(i, 1);
       }
     }
+    await persistTrainingState();
   },
-  updateSuite(id: string, updates: Partial<TrainingSuite>, user: User) {
+  async updateSuite(id: string, updates: Partial<TrainingSuite>, user: User) {
     const suite = suites.find(s => s.id === id);
     if (!suite) throw new Error("Suite not found");
     if (!canWriteScoped(suite, user)) throw new Error("Access denied");
@@ -124,9 +189,10 @@ export const store = {
     if (updates.allowedTypes !== undefined) suite.allowedTypes = updates.allowedTypes;
     if (updates.feedbackMode !== undefined) suite.feedbackMode = updates.feedbackMode;
     
+    await persistTrainingState();
     return suite;
   },
-  replaceSuiteContents(id: string, replacement: TrainingSuite, replacementQuestions: Question[], user: User) {
+  async replaceSuiteContents(id: string, replacement: TrainingSuite, replacementQuestions: Question[], user: User) {
     const suite = suites.find(s => s.id === id);
     if (!suite) throw new Error("Suite not found");
     if (!canWriteScoped(suite, user)) throw new Error("Access denied");
@@ -155,6 +221,7 @@ export const store = {
       ownerUserId: suite.scope === "personal" ? suite.ownerUserId : undefined
     }));
     questions.push(...normalizedQuestions);
+    await persistTrainingState();
     return { suite, questions: normalizedQuestions };
   },
   listSubmissions(user: User) {
@@ -183,6 +250,28 @@ export const store = {
     return submission;
   }
 };
+
+async function persistTrainingState() {
+  await getPool().execute(
+    `INSERT INTO ace_training_state (id, topics_json, suites_json, questions_json)
+     VALUES (1, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       topics_json = VALUES(topics_json),
+       suites_json = VALUES(suites_json),
+       questions_json = VALUES(questions_json),
+       updated_at = CURRENT_TIMESTAMP`,
+    [JSON.stringify(topics), JSON.stringify(suites), JSON.stringify(questions)]
+  );
+}
+
+function replaceArray<T>(target: T[], source: T[]) {
+  target.splice(0, target.length, ...source);
+}
+
+function getPool() {
+  if (!pool) throw new Error("Training store is not initialized");
+  return pool;
+}
 
 function canReadScoped(item: { scope: BankScope; ownerUserId?: string }, user?: User) {
   if (item.scope === "public") return true;

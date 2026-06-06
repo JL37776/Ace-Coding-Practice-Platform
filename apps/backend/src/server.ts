@@ -5,14 +5,16 @@ import { initAuthStore } from "./auth-store.js";
 import { config } from "./config.js";
 import { createApiRouter } from "./routes.js";
 import { initStudyStore } from "./study-store.js";
+import { initTrainingStore } from "./store.js";
 
 await initAuthStore();
 await initStudyStore();
+await initTrainingStore();
 
 const app = express();
 
 app.use(cors({ origin: config.frontendOrigin === "*" ? true : config.frontendOrigin, credentials: true }));
-app.use(express.json({ limit: "256kb" }));
+app.use(express.json({ limit: "10mb" }));
 app.use("/api", createApiRouter());
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

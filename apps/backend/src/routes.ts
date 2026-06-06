@@ -88,6 +88,12 @@ const completeStudySchema = z.object({
   questionCount: z.number().int().min(1)
 });
 
+const trainingStateSchema = z.object({
+  topics: z.array(z.unknown()),
+  suites: z.array(z.unknown()),
+  questions: z.array(z.unknown())
+});
+
 const judgeResultSchema = z.object({
   status: z.enum([
     "queued",
@@ -168,6 +174,26 @@ export function createApiRouter() {
 
   router.get("/settings", requireUser, (_req, res) => {
     res.json({ data: store.getSystemSettings() });
+  });
+
+  router.get("/admin/training-state", requireUser, (req, res) => {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    res.json({ data: store.exportTrainingState() });
+  });
+
+  router.put("/admin/training-state", requireUser, async (req, res, next) => {
+    try {
+      if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const payload = trainingStateSchema.parse(req.body);
+      const imported = await store.importTrainingState(payload as { topics: TopicNode[]; suites: TrainingSuite[]; questions: Question[] });
+      res.json({ data: imported });
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.get("/study/dashboard", requireUser, async (req, res, next) => {
