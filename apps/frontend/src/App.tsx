@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { AuthSession, BankScope, Language, PracticeFeedbackMode, PracticeSessionMode, Problem, Question, StudyDashboard, Submission, TopicNode, TrainingSuite, User } from "@ace/shared";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
@@ -148,7 +148,7 @@ tags=runner`;
 
 const aiPromptTemplate = `You are generating one complete practice suite for Ace Practice.
 
-Return ONLY raw text in the exact parser format below. Do not use Markdown fences.
+Return ONLY raw text in the exact parser format below. Do not wrap the whole response in Markdown fences.
 
 Rules:
 - The suite belongs to the selected topic and must be self-contained.
@@ -156,7 +156,8 @@ Rules:
 - Use a balanced mix unless the user asks for only one type.
 - Every non-coding question must include answer= and explanation=.
 - Include an optional @outline block after @suite when the suite is based on a lesson, article, or learning path page.
-- The @outline block is Markdown. Use it for the source content outline, learning objectives, key terms, and common traps.
+- The @outline block is Markdown for a readable knowledge note. Supported formatting: ##/### headings, bullet lists, **important terms**, ==highlighted traps==, inline code like \`class Person\`, and fenced code blocks with ~~~language.
+- Do not put raw HTML in @outline. Prefer short sections, scannable bullets, and one small code example only when it helps.
 
 Single-choice example (exactly one correct answer):
 @q
@@ -226,12 +227,31 @@ description=<what this suite trains>
 duration=<minutes>
 
 @outline
-## Source Outline
-- Learning objective:
-- Key concepts:
-- Important distinctions:
-- Common mistakes:
-- Source notes:
+## Knowledge Outline
+### Core idea
+- **Learning objective:** what this suite trains and why it matters.
+- **Mental model:** the smallest useful explanation a learner should remember.
+
+### Key terms
+- **Term:** short definition with inline code when useful, e.g. \`new Person()\`.
+- **Term:** short definition.
+
+### Important distinctions
+- **A vs B:** explain the difference.
+- **Common signal:** what to look for in code or questions.
+
+### Common traps
+- ==Trap to notice:== why learners often get this wrong.
+- ==Trap to notice:== another mistake the questions should expose.
+
+### Code shape
+~~~csharp
+// Optional small example. Use only when the source lesson has code worth remembering.
+var item = new Example();
+~~~
+
+### Source notes
+- Optional lesson title, page, or link notes.
 
 @q
 type=<single|multiple|boolean|blank|coding>
@@ -1316,48 +1336,110 @@ function SuiteConfig(props: {
   );
 }
 
+type MarkdownBlock =
+  | { type: "heading"; level: number; text: string }
+  | { type: "list"; items: string[] }
+  | { type: "paragraph"; text: string }
+  | { type: "code"; language?: string; code: string };
+
 function MarkdownContent({ markdown }: { markdown: string }) {
-  const lines = markdown.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const blocks: Array<{ type: "heading"; level: number; text: string } | { type: "list"; items: string[] } | { type: "paragraph"; text: string }> = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const heading = line.match(/^(#{1,4})\s+(.+)$/);
-    if (heading) {
-      blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
-      continue;
-    }
-    if (line.startsWith("- ")) {
-      const items = [line.slice(2).trim()];
-      while (index + 1 < lines.length && lines[index + 1].startsWith("- ")) {
-        index += 1;
-        items.push(lines[index].slice(2).trim());
-      }
-      blocks.push({ type: "list", items });
-      continue;
-    }
-    blocks.push({ type: "paragraph", text: line });
-  }
+  const blocks = parseMarkdownBlocks(markdown);
 
   return (
     <article className="markdown-content">
       {blocks.map((block, index) => {
         if (block.type === "heading") {
           const HeadingTag = block.level <= 2 ? "h3" : "h4";
-          return <HeadingTag key={index}>{block.text}</HeadingTag>;
+          return <HeadingTag key={index}>{renderMarkdownInline(block.text)}</HeadingTag>;
         }
         if (block.type === "list") {
-          return <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}><MarkdownInline text={item} /></li>)}</ul>;
+          return <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{renderMarkdownInline(item)}</li>)}</ul>;
         }
-        return <p key={index}><MarkdownInline text={block.text} /></p>;
+        if (block.type === "code") {
+          return (
+            <figure className="markdown-code-block" key={index}>
+              {block.language && <figcaption>{block.language}</figcaption>}
+              <pre><code>{block.code}</code></pre>
+            </figure>
+          );
+        }
+        return <p key={index}>{renderMarkdownInline(block.text)}</p>;
       })}
     </article>
   );
 }
 
-function MarkdownInline({ text }: { text: string }) {
+function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const blocks: MarkdownBlock[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const fence = line.match(/^(```|~~~)([A-Za-z0-9_+#.-]*)\s*$/);
+    if (fence) {
+      const marker = fence[1];
+      const language = fence[2] || undefined;
+      const codeLines: string[] = [];
+      while (index + 1 < lines.length && !lines[index + 1].trim().startsWith(marker)) {
+        index += 1;
+        codeLines.push(lines[index]);
+      }
+      if (index + 1 < lines.length) index += 1;
+      blocks.push({ type: "code", language, code: codeLines.join("\n") });
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
+      continue;
+    }
+
+    if (line.startsWith("- ")) {
+      const items = [line.slice(2).trim()];
+      while (index + 1 < lines.length && lines[index + 1].trim().startsWith("- ")) {
+        index += 1;
+        items.push(lines[index].trim().slice(2).trim());
+      }
+      blocks.push({ type: "list", items });
+      continue;
+    }
+
+    blocks.push({ type: "paragraph", text: line });
+  }
+  return blocks;
+}
+
+function renderMarkdownInline(text: string): ReactNode {
   const label = text.match(/^([^:]{2,48}):\s*(.+)$/);
-  if (!label) return <>{text}</>;
-  return <><strong>{label[1]}:</strong> {label[2]}</>;
+  if (label) {
+    return <><strong>{label[1]}:</strong> {renderMarkdownSegments(label[2])}</>;
+  }
+  return renderMarkdownSegments(text);
+}
+
+function renderMarkdownSegments(text: string): ReactNode {
+  const nodes: ReactNode[] = [];
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|==[^=]+==)/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text))) {
+    if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
+    const token = match[0];
+    const body = token.slice(2, -2);
+    if (token.startsWith("`")) {
+      nodes.push(<code className="markdown-inline-code" key={nodes.length}>{token.slice(1, -1)}</code>);
+    } else if (token.startsWith("**")) {
+      nodes.push(<strong key={nodes.length}>{body}</strong>);
+    } else {
+      nodes.push(<mark key={nodes.length}>{body}</mark>);
+    }
+    cursor = match.index + token.length;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes.length ? nodes : text;
 }
 
 function SuiteResultSummary(props: {
