@@ -650,6 +650,14 @@ export default function App() {
   function answerQuestion(questionId: string, value: unknown) {
     const nextAnswers = { ...answers, [questionId]: value };
     setAnswers(nextAnswers);
+    if (!finalSubmitted) {
+      setQuestionResults((results) => {
+        if (!results[questionId]) return results;
+        const nextResults = { ...results };
+        delete nextResults[questionId];
+        return nextResults;
+      });
+    }
     if (activePracticeMode === "practice") {
       setFeedback("");
       void savePracticeDraft(nextAnswers);
@@ -741,6 +749,7 @@ export default function App() {
         questionIndex={questionIndex}
         currentQuestion={currentQuestion}
         answers={answers}
+        questionResults={questionResults}
         feedback={feedback}
         language={language}
         sourceCode={sourceCode}
@@ -1240,7 +1249,7 @@ function SuiteConfig(props: {
           <summary>Knowledge Markdown</summary>
           <section className="suite-outline">
             {outlineMarkdown ? (
-              <pre>{outlineMarkdown}</pre>
+              <MarkdownContent markdown={outlineMarkdown} />
             ) : (
               <p>No knowledge outline is saved for this suite yet. Import raw suite content with an @outline Markdown block to attach one.</p>
             )}
@@ -1305,6 +1314,50 @@ function SuiteConfig(props: {
       </section>
     </>
   );
+}
+
+function MarkdownContent({ markdown }: { markdown: string }) {
+  const lines = markdown.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const blocks: Array<{ type: "heading"; level: number; text: string } | { type: "list"; items: string[] } | { type: "paragraph"; text: string }> = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      const items = [line.slice(2).trim()];
+      while (index + 1 < lines.length && lines[index + 1].startsWith("- ")) {
+        index += 1;
+        items.push(lines[index].slice(2).trim());
+      }
+      blocks.push({ type: "list", items });
+      continue;
+    }
+    blocks.push({ type: "paragraph", text: line });
+  }
+
+  return (
+    <article className="markdown-content">
+      {blocks.map((block, index) => {
+        if (block.type === "heading") {
+          const HeadingTag = block.level <= 2 ? "h3" : "h4";
+          return <HeadingTag key={index}>{block.text}</HeadingTag>;
+        }
+        if (block.type === "list") {
+          return <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}><MarkdownInline text={item} /></li>)}</ul>;
+        }
+        return <p key={index}><MarkdownInline text={block.text} /></p>;
+      })}
+    </article>
+  );
+}
+
+function MarkdownInline({ text }: { text: string }) {
+  const label = text.match(/^([^:]{2,48}):\s*(.+)$/);
+  if (!label) return <>{text}</>;
+  return <><strong>{label[1]}:</strong> {label[2]}</>;
 }
 
 function SuiteResultSummary(props: {
@@ -1420,6 +1473,7 @@ function PracticePanel(props: {
   questionIndex: number;
   currentQuestion?: Question;
   answers: Record<string, unknown>;
+  questionResults: Record<string, "correct" | "incorrect">;
   feedback: string;
   language: Language;
   sourceCode: string;
@@ -1467,7 +1521,8 @@ function PracticePanel(props: {
           {props.questions.map((item, index) => {
             const value = props.answers[item.id];
             const answered = value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0);
-            return <button key={item.id} className={`${index === props.questionIndex ? "active" : ""} ${answered ? "answered" : ""}`} onClick={() => props.onQuestionIndex(index)}><span>{index + 1}</span><em>{item.type}</em></button>;
+            const result = props.questionResults[item.id];
+            return <button key={item.id} className={`${index === props.questionIndex ? "active" : ""} ${answered ? "answered" : ""} ${result ? `result-${result}` : ""}`} onClick={() => props.onQuestionIndex(index)}><span>{index + 1}</span><em>{item.type}</em></button>;
           })}
         </aside>
         <section className="panel practice-card">
@@ -1517,6 +1572,8 @@ function EmptySuiteState(props: {
 function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { question: Question }) {
   const value = props.answers[props.question.id];
   const showAnswer = props.feedbackMode === "final" && props.finalSubmitted;
+  const result = props.questionResults[props.question.id];
+  const showResult = Boolean(result) && (props.feedbackMode === "instant" || props.finalSubmitted);
   if (props.question.type === "coding") {
     const codeAllowed = props.user.role === "admin";
     return (
@@ -1539,9 +1596,9 @@ function QuestionRenderer(props: Parameters<typeof PracticePanel>[0] & { questio
       <h3>{props.question.title}</h3>
       {props.question.description && <p>{props.question.description}</p>}
       <QuestionCodeBlock question={props.question} />
-      {props.question.type === "single" && <OptionList question={props.question} value={value as string | undefined} onAnswer={props.onAnswer} />}
-      {props.question.type === "multiple" && <MultiOptionList question={props.question} value={(value as string[] | undefined) || []} onAnswer={props.onAnswer} />}
-      {props.question.type === "boolean" && <div className="choice-list"><button className={value === true ? "selected" : ""} onClick={() => props.onAnswer(props.question.id, true)}>True</button><button className={value === false ? "selected" : ""} onClick={() => props.onAnswer(props.question.id, false)}>False</button></div>}
+      {props.question.type === "single" && <OptionList question={props.question} value={value as string | undefined} showResult={showResult} onAnswer={props.onAnswer} />}
+      {props.question.type === "multiple" && <MultiOptionList question={props.question} value={(value as string[] | undefined) || []} showResult={showResult} onAnswer={props.onAnswer} />}
+      {props.question.type === "boolean" && <BooleanOptionList question={props.question} value={value as boolean | undefined} showResult={showResult} onAnswer={props.onAnswer} />}
       {props.question.type === "blank" && <input className="answer-input" placeholder="Type your answer" value={(value as string | undefined) || ""} onChange={(event) => props.onAnswer(props.question.id, event.target.value)} />}
       {props.feedbackMode === "instant" ? <div className="actions"><button onClick={props.onSubmitNonCoding}>Submit Answer</button></div> : <div className="notice">Answer saved. Submit the suite at the end to show answers.</div>}
       {props.feedback && props.feedbackMode === "instant" && <div className="notice">{props.feedback}</div>}
@@ -1604,16 +1661,47 @@ function AnswerReveal({ question }: { question: Question }) {
   );
 }
 
-function OptionList({ question, value, onAnswer }: { question: Question; value?: string; onAnswer: (id: string, value: unknown) => void }) {
-  return <div className="choice-list">{question.options?.map((option) => <button key={option.id} className={value === option.id ? "selected" : ""} onClick={() => onAnswer(question.id, option.id)}><span style={{display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "32px", height: "32px", borderRadius: "50%", background: value === option.id ? "#2563eb" : "#e0e7ff", color: value === option.id ? "white" : "#2563eb", fontWeight: "900", fontSize: "14px"}}>{option.id}</span><span>{option.text}</span></button>)}</div>;
+function OptionList({ question, value, showResult, onAnswer }: { question: Question; value?: string; showResult: boolean; onAnswer: (id: string, value: unknown) => void }) {
+  return <div className="choice-list">{question.options?.map((option) => {
+    const state = getOptionState(option.id, value === option.id, question.answer, showResult);
+    return <button key={option.id} className={state} onClick={() => onAnswer(question.id, option.id)}><span className="option-badge">{option.id}</span><span>{option.text}</span></button>;
+  })}</div>;
 }
 
-function MultiOptionList({ question, value, onAnswer }: { question: Question; value: string[]; onAnswer: (id: string, value: unknown) => void }) {
+function MultiOptionList({ question, value, showResult, onAnswer }: { question: Question; value: string[]; showResult: boolean; onAnswer: (id: string, value: unknown) => void }) {
   return <div className="choice-list">{question.options?.map((option) => {
     const selected = value.includes(option.id);
+    const state = getOptionState(option.id, selected, question.answer, showResult);
     const nextValue = selected ? value.filter((id) => id !== option.id) : [...value, option.id];
-    return <button key={option.id} className={selected ? "selected" : ""} onClick={() => onAnswer(question.id, nextValue)}><span style={{display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "32px", height: "32px", borderRadius: "8px", background: selected ? "#2563eb" : "#e0e7ff", color: selected ? "white" : "#2563eb", fontWeight: "900", fontSize: "14px"}}>{selected ? "\u2713" : ""}</span><span>{option.text}</span></button>;
+    return <button key={option.id} className={state} onClick={() => onAnswer(question.id, nextValue)}><span className="option-badge">{selected ? "\u2713" : option.id}</span><span>{option.text}</span></button>;
   })}</div>;
+}
+
+function BooleanOptionList({ question, value, showResult, onAnswer }: { question: Question; value?: boolean; showResult: boolean; onAnswer: (id: string, value: unknown) => void }) {
+  return (
+    <div className="choice-list">
+      {[true, false].map((optionValue) => {
+        const label = optionValue ? "True" : "False";
+        const state = getBooleanOptionState(optionValue, value === optionValue, question.answer, showResult);
+        return <button key={label} className={state} onClick={() => onAnswer(question.id, optionValue)}><span className="option-badge">{label[0]}</span><span>{label}</span></button>;
+      })}
+    </div>
+  );
+}
+
+function getOptionState(optionId: string, selected: boolean, answer: unknown, showResult: boolean) {
+  const expected = Array.isArray(answer) ? answer.map(String) : [String(answer)];
+  const correct = expected.includes(optionId);
+  if (showResult && correct) return selected ? "selected correct-option" : "correct-option";
+  if (showResult && selected && !correct) return "selected incorrect-option";
+  return selected ? "selected" : "";
+}
+
+function getBooleanOptionState(optionValue: boolean, selected: boolean, answer: unknown, showResult: boolean) {
+  const correct = answer === optionValue;
+  if (showResult && correct) return selected ? "selected correct-option" : "correct-option";
+  if (showResult && selected && !correct) return "selected incorrect-option";
+  return selected ? "selected" : "";
 }
 
 function RawQuestionSummary({ questions }: { questions: Question[] }) {
