@@ -118,7 +118,7 @@ const codeEditorTheme = EditorView.theme({
 
 const defaultRaw = `@suite
 title=Imported Mixed Practice
-description=Paste a whole suite here. Then set time, validate, confirm overwrite, and practice.
+description=Paste a whole suite here. Import validates and saves it automatically.
 duration=15
 
 @outline
@@ -565,35 +565,17 @@ export default function App() {
     }
   }
 
-  async function parseRaw() {
-    if (!activeTopicId) return;
-    try {
-      const parsed = await api.parseTopicRaw({ scope, topicId: activeTopicId, raw: rawText });
-      setRawPreview(JSON.stringify(parsed, null, 2));
-      setRawParsedQuestions(parsed.questions);
-      setEditorMessage(`Format valid. Parsed ${parsed.questions.length} questions for ${parsed.suite.title}.`);
-    } catch (error) {
-      alert("Raw format is invalid: " + (error instanceof Error ? error.message : "Unknown error"));
-    }
-  }
-
-  async function validateAndImportRaw() {
+  async function importRaw() {
     if (!activeTopicId || !activeSuite) return;
     try {
-      const parsed = await api.parseTopicRaw({ scope, topicId: activeTopicId, raw: rawText });
-      setRawPreview(JSON.stringify(parsed, null, 2));
-      setRawParsedQuestions(parsed.questions);
-      if (!confirm("Format valid. Import and overwrite this suite?")) {
-        setEditorMessage(`Format valid. Parsed ${parsed.questions.length} questions for ${parsed.suite.title}.`);
-        return;
-      }
       const imported = await api.importTopicRaw({ scope, topicId: activeTopicId, suiteId: activeSuite.id, raw: rawText });
+      setRawPreview(JSON.stringify(imported, null, 2));
       setActiveSuiteId(imported.suite.id);
       setRawParsedQuestions(imported.questions);
       setEditorMessage(`Imported ${imported.questions.length} questions and overwrote ${imported.suite.title}.`);
       await refreshWorkspace({ scope, topicId: imported.suite.topicId, suiteId: imported.suite.id });
     } catch (error) {
-      alert("Failed to validate/import raw suite: " + (error instanceof Error ? error.message : "Unknown error"));
+      alert("Import failed. Fix the raw suite format and try again: " + (error instanceof Error ? error.message : "Unknown error"));
     }
   }
 
@@ -897,8 +879,7 @@ export default function App() {
               rawPreview={rawPreview}
               editorMessage={editorMessage}
               onRawText={setRawText}
-              onParseRaw={() => void parseRaw()}
-              onValidateRaw={() => void validateAndImportRaw()}
+              onImportRaw={() => void importRaw()}
               aiPromptTemplate={aiPromptTemplate}
               onFeedbackMode={(value) => activeSuiteId && canEditActiveSuite && setSuiteFeedbackMode({ ...suiteFeedbackMode, [activeSuiteId]: value })}
               editingTitle={editingTitle}
@@ -1238,8 +1219,7 @@ function SuiteConfig(props: {
   editingDuration: Record<string, string>;
   isSavingEdit: boolean;
   onRawText: (value: string) => void;
-  onParseRaw: () => void;
-  onValidateRaw: () => void;
+  onImportRaw: () => void;
   onFeedbackMode: (mode: PracticeFeedbackMode) => void;
   onEditTitle: (id: string, value: string) => void;
   onEditDescription: (id: string, value: string) => void;
@@ -1320,13 +1300,13 @@ function SuiteConfig(props: {
         </details>
         <details className="config-section">
           <summary>Raw import</summary>
-          <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI/generated raw content for one full suite. Validate can overwrite the current suite after confirmation.</p></div><button className="secondary" disabled>AI Similar</button></div>
+          <div className="panel-heading"><div><h3>Paste Topic Raw</h3><p>Paste AI/generated raw content for one full suite. Import validates the format and overwrites the current suite when valid.</p></div><button className="secondary" disabled>AI Similar</button></div>
           <label className="prompt-template-label">
             AI Prompt Template
             <textarea className="prompt-template" value={props.aiPromptTemplate} readOnly />
           </label>
           <textarea className="raw-editor" value={props.rawText} onChange={(event) => props.onRawText(event.target.value)} readOnly={!props.canEditSuite} />
-          <div className="actions"><button onClick={props.onParseRaw}>Parse</button><button className="secondary" onClick={props.onValidateRaw} disabled={!props.canEditSuite}>Validate</button></div>
+          <div className="actions"><button onClick={props.onImportRaw} disabled={!props.canEditSuite}>Import</button></div>
           {props.editorMessage && <div className="notice">{props.editorMessage}</div>}
           {props.rawPreview && <pre className="raw-preview">{props.rawPreview}</pre>}
           <div className="ai-box"><strong>AI Add Similar Questions</strong><span>Target: {props.scope} bank</span><span>Generate similar questions after schema validation. Provider wiring comes next.</span></div>
@@ -1795,7 +1775,7 @@ function RawQuestionSummary({ questions }: { questions: Question[] }) {
     <section className="raw-summary">
       <div className="panel-heading">
         <div>
-          <h3>Validated Questions</h3>
+          <h3>Imported Questions</h3>
           <p>{questions.length} questions parsed. Types: {Object.entries(counts).map(([type, count]) => `${type} ${count}`).join(", ")}</p>
         </div>
       </div>
