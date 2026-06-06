@@ -1414,7 +1414,7 @@ function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
 
 function renderMarkdownInline(text: string): ReactNode {
   const label = text.match(/^([^:]{2,48}):\s*(.+)$/);
-  if (label) {
+  if (label && !/[`*=]/.test(label[1])) {
     return <><strong>{label[1]}:</strong> {renderMarkdownSegments(label[2])}</>;
   }
   return renderMarkdownSegments(text);
@@ -1422,7 +1422,7 @@ function renderMarkdownInline(text: string): ReactNode {
 
 function renderMarkdownSegments(text: string): ReactNode {
   const nodes: ReactNode[] = [];
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|==[^=]+==)/g;
+  const pattern = /(`[^`]+`|\*\*.+?\*\*|==.+?==)/g;
   let cursor = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text))) {
